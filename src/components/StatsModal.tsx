@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Calendar, Wallet, Heart, TrendingUp, BarChart3, Percent, Check, Download } from 'lucide-react';
-import { Transaction, CATEGORIES, formatUZS, formatUSD, MONTH_NAMES } from '../types';
+import { Transaction, CATEGORIES, formatUZS, formatUSD } from '../types';
 import { jsPDF } from 'jspdf';
 
 interface StatsModalProps {
@@ -241,10 +241,12 @@ export const StatsModal: React.FC<StatsModalProps> = ({
       doc.setFontSize(9.5);
       doc.setFont('Helvetica', 'bold');
       doc.text(item.label, M + 6.5, y);
+      // Measure label width while the bold 9.5pt font is still active
+      const labelWidth = doc.getTextWidth(item.label);
       doc.setTextColor(148, 163, 184);
       doc.setFontSize(8);
       doc.setFont('Helvetica', 'normal');
-      doc.text(`(${item.count} ta kirim)`, M + 6.5 + doc.getTextWidth(item.label) + 3.5, y);
+      doc.text(`(${item.count} ta kirim)`, M + 6.5 + labelWidth + 2.5, y);
 
       // Amount + percent (right)
       doc.setTextColor(30, 41, 59);
@@ -312,10 +314,15 @@ export const StatsModal: React.FC<StatsModalProps> = ({
         doc.rect(x, chartTop + chartH - totalH, barW, charityH, 'F');
 
         const [yy, mm] = mk.split('-');
+        // Iyun/Iyul share the same first 3 letters, so use distinct short names
+        const MONTH_SHORT: { [key: string]: string } = {
+          '01': 'Yan', '02': 'Fev', '03': 'Mar', '04': 'Apr', '05': 'May', '06': 'Iyn',
+          '07': 'Iyl', '08': 'Avg', '09': 'Sen', '10': 'Okt', '11': 'Noy', '12': 'Dek',
+        };
         doc.setTextColor(100, 116, 139);
         doc.setFontSize(6.5);
         doc.setFont('Helvetica', 'bold');
-        doc.text(`${(MONTH_NAMES[mm] || mm).slice(0, 3)} ${yy.slice(2)}`, x + barW / 2, chartTop + chartH + 4.5, { align: 'center' });
+        doc.text(`${MONTH_SHORT[mm] || mm} ${yy.slice(2)}`, x + barW / 2, chartTop + chartH + 4.5, { align: 'center' });
       });
 
       // Legend
