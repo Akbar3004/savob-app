@@ -1,6 +1,6 @@
 import { Transaction } from '../types';
 
-const REGISTRY_BIN_ID = 'DPD1L7noMK';
+const REGISTRY_BIN_ID = '019f6bf3-02f7-7ca7-a20f-74b70a54e102';
 const BASE_URL = '/api/bins';
 
 export async function hashPassword(password: string): Promise<string> {

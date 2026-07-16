@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
+const STORAGE_BASE = 'https://jsonblob.com/api/jsonBlob';
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Allow CORS for local development
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -21,17 +23,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const targetUrl = 'https://jsonbin-zeta.vercel.app/api/bins';
-    const response = await fetch(targetUrl, {
+    const response = await fetch(STORAGE_BASE, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify(req.body),
     });
 
-    const data = await response.json();
-    res.status(response.status).json(data);
+    if (!response.ok) {
+      res.status(response.status).json({ error: `Failed to create bin: ${response.statusText}` });
+      return;
+    }
+
+    // jsonblob returns the new blob id in the Location header
+    const location = response.headers.get('location') || '';
+    const id = location.split('/').pop();
+
+    if (!id) {
+      res.status(500).json({ error: 'Storage did not return a bin id' });
+      return;
+    }
+
+    res.status(200).json({ id });
   } catch (error: any) {
     console.error('Proxy POST error:', error);
     res.status(500).json({ error: 'Internal Server Error', message: error.message });

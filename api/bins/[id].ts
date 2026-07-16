@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
+const STORAGE_BASE = 'https://jsonblob.com/api/jsonBlob';
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Allow CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -21,11 +23,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const targetUrl = `https://jsonbin-zeta.vercel.app/api/bins/${id}`;
+  const targetUrl = `${STORAGE_BASE}/${id}`;
 
   try {
     if (req.method === 'GET') {
-      const response = await fetch(targetUrl);
+      const response = await fetch(targetUrl, {
+        headers: { 'Accept': 'application/json' },
+      });
       if (!response.ok) {
         res.status(response.status).json({ error: `Failed to fetch bin from target: ${response.statusText}` });
         return;
@@ -37,6 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
         body: JSON.stringify(req.body),
       });
