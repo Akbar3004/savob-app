@@ -53,9 +53,35 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   }, [editingTransaction]);
 
+  // Keep a clean numeric string in state ("12300.50"), render it grouped ("12,300.50")
+  const sanitizeAmount = (value: string, allowDecimal: boolean): string => {
+    let clean = value.replace(/[^\d.]/g, '');
+    if (!allowDecimal) return clean.replace(/\./g, '');
+    const firstDot = clean.indexOf('.');
+    if (firstDot !== -1) {
+      const intPart = clean.slice(0, firstDot);
+      const decPart = clean.slice(firstDot + 1).replace(/\./g, '').slice(0, 2);
+      clean = `${intPart}.${decPart}`;
+    }
+    return clean;
+  };
+
+  const formatAmountDisplay = (value: string): string => {
+    if (!value) return '';
+    const [intPart, decPart] = value.split('.');
+    const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return value.includes('.') ? `${grouped}.${decPart ?? ''}` : grouped;
+  };
+
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/[^\d.]/g, '');
-    setAmount(value);
+    setAmount(sanitizeAmount(e.target.value, currency === 'USD'));
+  };
+
+  // Phone keyboards often lack the "." key — this button inserts it for cents
+  const handleInsertDecimalPoint = () => {
+    if (!amount.includes('.')) {
+      setAmount((amount || '0') + '.');
+    }
   };
 
   const handleQuickAdd = (value: number) => {
@@ -126,7 +152,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="currency-toggle">
             <button
               type="button"
-              onClick={() => setCurrency('UZS')}
+              onClick={() => {
+                setCurrency('UZS');
+                setAmount((prev) => prev.split('.')[0]);
+              }}
               className={currency === 'UZS' ? 'active' : ''}
             >
               <span className="flex items-center gap-1">
@@ -153,16 +182,32 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="relative">
             <input
               type="text"
-              inputMode="decimal"
-              value={amount}
+              inputMode={currency === 'UZS' ? 'numeric' : 'decimal'}
+              value={formatAmountDisplay(amount)}
               onChange={handleAmountChange}
-              placeholder={currency === 'UZS' ? "Masalan: 500000" : "Masalan: 100.00"}
-              className="w-full text-xl font-bold font-display px-4 py-3.5 bg-slate-50/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-slate-800 placeholder-slate-300"
+              placeholder={currency === 'UZS' ? "Masalan: 500,000" : "Masalan: 100.00"}
+              className={`w-full text-xl font-bold font-display px-4 py-3.5 bg-slate-50/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-slate-800 placeholder-slate-300 ${currency === 'USD' ? 'pr-24' : 'pr-16'}`}
             />
+            {currency === 'USD' && (
+              <button
+                type="button"
+                onClick={handleInsertDecimalPoint}
+                disabled={amount.includes('.')}
+                title="Sent kiritish uchun nuqta qo'shish"
+                className="absolute right-14 top-1/2 -translate-y-1/2 w-9 h-9 rounded-xl bg-indigo-100 hover:bg-indigo-200 disabled:opacity-30 disabled:hover:bg-indigo-100 text-indigo-700 font-black text-xl leading-none flex items-center justify-center transition-all active:scale-95"
+              >
+                .
+              </button>
+            )}
             <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400 pointer-events-none text-sm">
               {currency === 'UZS' ? "SO'M" : 'USD'}
             </span>
           </div>
+          {currency === 'USD' && (
+            <p className="text-[10px] text-slate-400 font-semibold mt-1.5 pl-1">
+              💡 Sent kiritish uchun yuqoridagi <span className="font-black text-indigo-500">[ . ]</span> tugmasini bosing (masalan: 100<span className="font-black text-indigo-500">.</span>50)
+            </p>
+          )}
         </div>
 
         {/* Quick Add Buttons */}
