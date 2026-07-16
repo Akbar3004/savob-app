@@ -104,14 +104,14 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
     doc.text(rangeText, w / 2, 26, { align: 'center' });
 
     // Table setup
-    const tableHeaders = [['Sana', 'Kategoriya', 'Izoh', 'Daromad (so\'m)', 'Daromad ($)', `Ehson UZS`, `Sof UZS` ]];
-    
+    const tableHeaders = [['#', 'Sana', 'Kategoriya', 'Izoh', 'Daromad (so\'m)', 'Daromad ($)', `Ehson UZS`, `Sof UZS` ]];
+
     let totalUZS = 0;
     let totalUSD = 0;
     let charityUZS = 0;
     let netUZS = 0;
 
-    const tableRows = filteredTransactions.map((t) => {
+    const tableRows = filteredTransactions.map((t, idx) => {
       const u = t.currency === 'USD' ? t.amount * exchangeRate : t.amount;
       const d = t.currency === 'UZS' ? t.amount / exchangeRate : t.amount;
       const cU = (u * t.charityPercentage) / 100;
@@ -125,6 +125,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
       const catLabel = CATEGORIES.find((c) => c.id === t.category)?.label || 'Boshqa';
 
       return [
+        String(idx + 1),
         t.date,
         catLabel,
         t.description,
@@ -137,6 +138,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
 
     // Add totals row
     tableRows.push([
+      '',
       'JAMI:',
       '',
       '',
@@ -155,10 +157,11 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
       footStyles: { fontStyle: 'bold' },
       styles: { fontSize: 8.5 },
       columnStyles: {
-        3: { halign: 'right' },
+        0: { halign: 'center', cellWidth: 9 },
         4: { halign: 'right' },
         5: { halign: 'right' },
-        6: { halign: 'right' }
+        6: { halign: 'right' },
+        7: { halign: 'right' }
       },
       didParseCell: (data) => {
         // Style the last totals row differently

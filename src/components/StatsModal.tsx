@@ -189,9 +189,48 @@ export const StatsModal: React.FC<StatsModalProps> = ({
     doc.setFontSize(8);
     doc.text(`Tayyorlandi: ${new Date().toISOString().split('T')[0]}`, W - M, rangeType === 'custom' ? 31 : 25, { align: 'right' });
 
+    // ===== Min/Max/Avg strip (topmost data block) =====
+    const amountsUZS = dateFilteredTransactions.map(toUZS);
+    const maxKirimUZS = Math.max(...amountsUZS);
+    const minKirimUZS = Math.min(...amountsUZS);
+    const avgKirimUZS = stats.totalUZS / stats.count;
+
+    const stripY = 47;
+    const stripH = 18;
+    doc.setFillColor(241, 245, 249);
+    doc.roundedRect(M, stripY, CW, stripH, 2.5, 2.5, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(M, stripY, CW, stripH, 2.5, 2.5, 'S');
+
+    const sCol = CW / 3;
+    const stripItems: { label: string; uzs: number; color: [number, number, number] }[] = [
+      { label: 'ENG KATTA KIRIM', uzs: maxKirimUZS, color: [16, 185, 129] },
+      { label: 'ENG KICHIK KIRIM', uzs: minKirimUZS, color: [244, 63, 94] },
+      { label: "O'RTACHA KIRIM", uzs: avgKirimUZS, color: [99, 102, 241] },
+    ];
+    stripItems.forEach((s, i) => {
+      const cx = M + sCol * i + sCol / 2;
+      doc.setTextColor(...s.color);
+      doc.setFontSize(6.5);
+      doc.setFont('Helvetica', 'bold');
+      doc.text(s.label, cx, stripY + 5.8, { align: 'center' });
+      doc.setTextColor(30, 41, 59);
+      doc.setFontSize(9.5);
+      doc.text(formatUZS(s.uzs), cx, stripY + 11.3, { align: 'center' });
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(7);
+      doc.setFont('Helvetica', 'normal');
+      doc.text(formatUSD(s.uzs / exchangeRate), cx, stripY + 15.5, { align: 'center' });
+      if (i > 0) {
+        doc.setDrawColor(226, 232, 240);
+        doc.line(M + sCol * i, stripY + 3.5, M + sCol * i, stripY + stripH - 3.5);
+      }
+    });
+
     // ===== Metric cards =====
-    const cardY = 52;
-    const cardH = 28;
+    const cardY = 70;
+    const cardH = 26;
     const gap = 6;
     const cardW = (CW - gap * 2) / 3;
     const cards: { label: string; uzs: string; usd: string; accent: [number, number, number]; bg: [number, number, number]; dark: [number, number, number] }[] = [
@@ -210,19 +249,19 @@ export const StatsModal: React.FC<StatsModalProps> = ({
       doc.setTextColor(...c.accent);
       doc.setFontSize(6.5);
       doc.setFont('Helvetica', 'bold');
-      doc.text(c.label, x + 5, cardY + 7);
+      doc.text(c.label, x + 5, cardY + 6.5);
 
       doc.setTextColor(...c.dark);
       doc.setFontSize(11.5);
-      doc.text(c.uzs, x + 5, cardY + 15.5);
+      doc.text(c.uzs, x + 5, cardY + 14.5);
 
       doc.setTextColor(...c.accent);
       doc.setFontSize(8.5);
-      doc.text(c.usd, x + 5, cardY + 22.5);
+      doc.text(c.usd, x + 5, cardY + 21);
     });
 
     // ===== Category breakdown =====
-    let y = cardY + cardH + 14;
+    let y = cardY + cardH + 12;
     doc.setFillColor(99, 102, 241);
     doc.roundedRect(M, y - 4, 2.5, 5, 0.6, 0.6, 'F');
     doc.setTextColor(30, 41, 59);
@@ -265,7 +304,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({
       doc.setFillColor(r, g, b);
       doc.roundedRect(M, barY, fillW, 2.2, 1.1, 1.1, 'F');
 
-      y += 13.5;
+      y += 13;
     });
 
     // ===== Monthly dynamics (bar chart) =====
@@ -280,7 +319,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({
     const monthKeys = Object.keys(monthGroups).sort().slice(-12);
 
     if (monthKeys.length > 1) {
-      y += 6;
+      y += 5;
       doc.setFillColor(99, 102, 241);
       doc.roundedRect(M, y - 4, 2.5, 5, 0.6, 0.6, 'F');
       doc.setTextColor(30, 41, 59);
@@ -289,7 +328,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({
       doc.text('Oylik dinamika', M + 5.5, y);
       y += 6;
 
-      const chartH = 34;
+      const chartH = 30;
       const chartTop = y;
       const maxTotal = Math.max(...monthKeys.map((k) => monthGroups[k].total), 1);
       const slotW = CW / monthKeys.length;
@@ -326,7 +365,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({
       });
 
       // Legend
-      const legendY = chartTop + chartH + 10;
+      const legendY = chartTop + chartH + 9;
       doc.setFillColor(99, 102, 241);
       doc.rect(M, legendY - 2, 3, 3, 'F');
       doc.setTextColor(100, 116, 139);
@@ -336,13 +375,13 @@ export const StatsModal: React.FC<StatsModalProps> = ({
       doc.rect(M + 32, legendY - 2, 3, 3, 'F');
       doc.text('Hayriya ulushi', M + 37, legendY + 0.5);
 
-      y = legendY + 8;
+      y = legendY + 7;
     } else {
       y += 4;
     }
 
     // ===== Summary box =====
-    const boxH = 30;
+    const boxH = 28;
     doc.setFillColor(248, 250, 252);
     doc.roundedRect(M, y, CW, boxH, 2.5, 2.5, 'F');
     doc.setDrawColor(226, 232, 240);

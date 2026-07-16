@@ -23,6 +23,7 @@ import {
   FileText,
   Award,
   Sparkles,
+  Gauge,
 } from 'lucide-react';
 import { Transaction, MonthlyStats, formatUZS, formatUSD, MONTH_NAMES } from './types';
 import { MetricCard } from './components/MetricCard';
@@ -31,6 +32,7 @@ import { MonthlyChart } from './components/MonthlyChart';
 import { TransactionList } from './components/TransactionList';
 import { AuthModal } from './components/AuthModal';
 import { StatsModal } from './components/StatsModal';
+import { ExtremesModal } from './components/ExtremesModal';
 import { ExportPDFModal } from './components/ExportPDFModal';
 import { MonthlyWrapModal } from './components/MonthlyWrapModal';
 import { saveUserData } from './services/db';
@@ -45,6 +47,7 @@ export default function App() {
   // New States
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [isExtremesOpen, setIsExtremesOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isWrapOpen, setIsWrapOpen] = useState(false);
   const [wrapMonthKey, setWrapMonthKey] = useState('');
@@ -490,6 +493,15 @@ export default function App() {
               <span className="hidden sm:inline text-[10px] uppercase tracking-wider">Statistika</span>
             </button>
 
+            {/* Personal Min/Max Analysis Trigger */}
+            <button
+              onClick={() => setIsExtremesOpen(true)}
+              className="p-2.5 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold"
+              title="Shaxsiy tahlil: eng katta / eng kichik / o'rtacha kirim"
+            >
+              <Gauge className="w-4 h-4 text-slate-600" />
+            </button>
+
             {/* PDF Export Quick Trigger */}
             <button
               onClick={() => setIsExportOpen(true)}
@@ -763,6 +775,13 @@ export default function App() {
       <StatsModal
         isOpen={isStatsOpen}
         onClose={() => setIsStatsOpen(false)}
+        transactions={transactions}
+        exchangeRate={exchangeRate}
+      />
+
+      <ExtremesModal
+        isOpen={isExtremesOpen}
+        onClose={() => setIsExtremesOpen(false)}
         transactions={transactions}
         exchangeRate={exchangeRate}
       />
