@@ -9,7 +9,8 @@ Kunlik daromadlarni kiritish, jamg'armani kuzatish, belgilangan foizda hayriya (
 - 📊 Oylik ustunli grafik va batafsil statistika (kunlik, haftalik, oylik, maxsus davr)
 - 📄 PDF hisobot eksporti (jsPDF)
 - ✨ "Savob Wrapped" — oylik jamlanma kartasi
-- ☁️ Parol asosida bulutda sinxronlash (localStorage kesh bilan oflayn ham ishlaydi)
+- ☁️ Parol asosida **doimiy** bulutda sinxronlash (Upstash Redis) — ma'lumot o'chib ketmaydi
+- 📴 localStorage kesh: oflayn ishlaydi, tarmoq tiklanganda avtomatik qayta yuboradi (hech qachon yo'qolmaydi)
 - 💱 O'zbekiston Markaziy banki (CBU) dan jonli USD kursi
 
 ## Texnologiyalar
@@ -18,6 +19,27 @@ Kunlik daromadlarni kiritish, jamg'armani kuzatish, belgilangan foizda hayriya (
 - Tailwind CSS 4
 - Motion (animatsiyalar), Lucide (ikonkalar)
 - Vercel Serverless Functions (`api/`)
+- Upstash Redis (Vercel KV) — doimiy ma'lumotlar ombori
+
+## Ma'lumotlar ombori (muhim)
+
+Ilova ma'lumotni **Upstash Redis** (Vercel KV) da saqlaydi. Bu bepul va
+doimiy — kalitlar muddati o'tib o'chib ketmaydi.
+
+> Ilgari `jsonblob.com` ishlatilgan edi; u 30 kun tegilmagan yozuvlarni
+> o'chirib yuborardi, shu sabab bir muddatdan keyin ma'lumotlar saqlanmay
+> qolar edi. Endi bu muammo bartaraf etilgan.
+
+### Vercel'da sozlash (bir marta)
+
+1. Vercel loyihasida **Storage** bo'limiga o'ting.
+2. **Upstash for Redis** (yoki **KV**) ni yarating va loyihaga **Connect** qiling.
+3. Vercel kerakli muhit o'zgaruvchilarini (`KV_REST_API_URL`,
+   `KV_REST_API_TOKEN`) avtomatik qo'shadi.
+4. Loyihani qayta **Deploy** qiling.
+
+Ombor ulanmasa, API `503` bilan tushunarli xabar qaytaradi (ilova esa
+localStorage'dagi mahalliy nusxadan ishlashda davom etadi).
 
 ## Lokal ishga tushirish
 
@@ -36,4 +58,5 @@ Ilova http://localhost:3000 da ochiladi.
 vercel
 ```
 
-Hech qanday muhit o'zgaruvchisi (env) talab qilinmaydi.
+So'ng yuqoridagi **"Ma'lumotlar ombori"** bo'limiga ko'ra Upstash Redis
+(Vercel KV) ni ulang — bu yagona bir martalik sozlash.

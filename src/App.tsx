@@ -35,7 +35,7 @@ import { StatsModal } from './components/StatsModal';
 import { ExtremesModal } from './components/ExtremesModal';
 import { ExportPDFModal } from './components/ExportPDFModal';
 import { MonthlyWrapModal } from './components/MonthlyWrapModal';
-import { saveUserData } from './services/db';
+import { saveUserData, loadUserData, hashPassword, UserData } from './services/db';
 
 export default function App() {
   const [binId, setBinId] = useState<string | null>(null);
@@ -59,76 +59,165 @@ export default function App() {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load initial session if exists
+  // Sinxronlash ref'lari — har doim eng oxirgi qiymatlarni ushlab turadi
+  const binIdRef = useRef<string | null>(null);
+  const pendingSaveRef = useRef<UserData | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    const savedBinId = localStorage.getItem('savob_bin_id');
-    const savedPassword = localStorage.getItem('savob_password');
-    
-    // Set default selectedPeriod to current month (e.g. "2026-07")
+    binIdRef.current = binId;
+  }, [binId]);
+
+  // ---- localStorage kesh yordamchilari (qurilmada ma'lumot hech qachon yo'qolmaydi) ----
+  const cacheKeys = (id: string) => ({
+    tx: `savob_tx_${id}`,
+    percent: `savob_percent_${id}`,
+    rate: `savob_rate_${id}`,
+  });
+
+  const writeCache = (id: string, d: UserData) => {
+    const k = cacheKeys(id);
+    localStorage.setItem(k.tx, JSON.stringify(d.transactions));
+    localStorage.setItem(k.percent, String(d.charityPercentage));
+    localStorage.setItem(k.rate, String(d.exchangeRate));
+  };
+
+  const readCache = (id: string): UserData | null => {
+    const k = cacheKeys(id);
+    const tx = localStorage.getItem(k.tx);
+    if (tx === null) return null;
+    try {
+      return {
+        transactions: JSON.parse(tx),
+        charityPercentage: parseInt(localStorage.getItem(k.percent) || '10', 10),
+        exchangeRate: parseFloat(localStorage.getItem(k.rate) || '12850'),
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const applyUserData = (d: UserData) => {
+    setTransactions(d.transactions);
+    setCharityPercentage(d.charityPercentage);
+    setExchangeRate(d.exchangeRate);
+  };
+
+  const scheduleRetry = () => {
+    if (retryTimerRef.current) return;
+    retryTimerRef.current = setTimeout(() => {
+      retryTimerRef.current = null;
+      flushPending();
+    }, 8000);
+  };
+
+  // Bulutga yozilmay qolgan o'zgarishni qayta yuborishga urinadi
+  const flushPending = async () => {
+    const id = binIdRef.current;
+    const payload = pendingSaveRef.current;
+    if (!id || !payload) return;
+    setSyncStatus('syncing');
+    const ok = await saveUserData(id, payload);
+    if (ok) {
+      if (pendingSaveRef.current === payload) pendingSaveRef.current = null;
+      setSyncStatus('synced');
+    } else {
+      setSyncStatus('error');
+      scheduleRetry();
+    }
+  };
+
+  // Ilova ochilganda: sessiyani tiklash + barqaror bulut bilan sinxronlash
+  useEffect(() => {
     const currentMonthStr = new Date().toISOString().slice(0, 7);
     setSelectedPeriod(currentMonthStr);
 
-    if (savedBinId && savedPassword) {
-      setBinId(savedBinId);
+    const savedPassword = localStorage.getItem('savob_password');
+    const legacyBinId = localStorage.getItem('savob_bin_id');
+    if (!savedPassword) return;
+
+    let cancelled = false;
+
+    (async () => {
+      // Barqaror kalit: parol xeshi (eski jsonblob sessiyalarini ham ko'chiradi)
+      let id: string;
+      try {
+        id = await hashPassword(savedPassword);
+      } catch {
+        id = legacyBinId || '';
+      }
+      if (!id || cancelled) return;
+
+      setBinId(id);
+      binIdRef.current = id;
       setUserPassword(savedPassword);
-      
-      const cachedTx = localStorage.getItem(`savob_tx_${savedBinId}`);
-      const cachedPercent = localStorage.getItem(`savob_percent_${savedBinId}`);
-      const cachedRate = localStorage.getItem(`savob_rate_${savedBinId}`);
-      
-      if (cachedTx) setTransactions(JSON.parse(cachedTx));
-      if (cachedPercent) setCharityPercentage(parseInt(cachedPercent, 10));
-      if (cachedRate) setExchangeRate(parseFloat(cachedRate));
-      
-      // Background sync from cloud to ensure latest data
-      fetch(`/api/bins/${savedBinId}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data) {
-            const txs = data.transactions || [];
-            const percent = typeof data.charityPercentage === 'number' ? data.charityPercentage : 10;
-            const rate = typeof data.exchangeRate === 'number' ? data.exchangeRate : 12850;
-            
-            setTransactions(txs);
-            setCharityPercentage(percent);
-            setExchangeRate(rate);
-            
-            localStorage.setItem(`savob_tx_${savedBinId}`, JSON.stringify(txs));
-            localStorage.setItem(`savob_percent_${savedBinId}`, percent.toString());
-            localStorage.setItem(`savob_rate_${savedBinId}`, rate.toString());
-          }
-        })
-        .catch((err) => {
-          console.error('Error fetching latest from cloud:', err);
-          setSyncStatus('error');
-        });
-    }
+      localStorage.setItem('savob_bin_id', id);
+
+      // 1) Darhol keshdan yuklash — bo'sh ekran bo'lmaydi, mahalliy ma'lumot yo'qolmaydi
+      const cache = readCache(id) || (legacyBinId ? readCache(legacyBinId) : null);
+      if (cache && !cancelled) {
+        applyUserData(cache);
+        writeCache(id, cache); // eski kalitdagi keshni yangi kalitga ko'chiramiz
+      }
+
+      // 2) Barqaror bulutdan fonda sinxronlash
+      const cloud = await loadUserData(id);
+      if (cancelled) return;
+
+      if (cloud) {
+        applyUserData(cloud);
+        writeCache(id, cloud);
+        setSyncStatus('synced');
+      } else if (cache) {
+        // Bulutda ma'lumot yo'q / ulanib bo'lmadi — mahalliy nusxadan qayta tiklaymiz
+        pendingSaveRef.current = cache;
+        flushPending();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Save/Sync triggers when state changes
+  // Tarmoq qaytganda yoki ilovaga qaytilganda kutilayotgan o'zgarishlarni yuboramiz
+  useEffect(() => {
+    const onOnline = () => flushPending();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') flushPending();
+    };
+    window.addEventListener('online', onOnline);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
+  // O'zgarishlarni saqlash: avval mahalliy kesh (kafolatli), keyin bulut (xatoda qayta urinish)
   const performSync = async (
     updatedTxs: Transaction[],
     percent: number,
     rate: number,
     currentBinId: string
   ) => {
-    setSyncStatus('syncing');
-    
-    // Save to local cache
-    localStorage.setItem(`savob_tx_${currentBinId}`, JSON.stringify(updatedTxs));
-    localStorage.setItem(`savob_percent_${currentBinId}`, percent.toString());
-    localStorage.setItem(`savob_rate_${currentBinId}`, rate.toString());
-
-    const success = await saveUserData(currentBinId, {
+    const payload: UserData = {
       transactions: updatedTxs,
       charityPercentage: percent,
       exchangeRate: rate,
-    });
+    };
 
-    if (success) {
+    writeCache(currentBinId, payload);
+    pendingSaveRef.current = payload;
+
+    setSyncStatus('syncing');
+    const ok = await saveUserData(currentBinId, payload);
+    if (ok) {
+      if (pendingSaveRef.current === payload) pendingSaveRef.current = null;
       setSyncStatus('synced');
     } else {
       setSyncStatus('error');
+      scheduleRetry();
     }
   };
 
@@ -138,18 +227,14 @@ export default function App() {
     passwordPlain: string
   ) => {
     setBinId(newBinId);
+    binIdRef.current = newBinId;
     setUserPassword(passwordPlain);
-    setTransactions(data.transactions);
-    setCharityPercentage(data.charityPercentage);
-    setExchangeRate(data.exchangeRate);
+    applyUserData(data);
 
     localStorage.setItem('savob_bin_id', newBinId);
     localStorage.setItem('savob_password', passwordPlain);
-    
-    localStorage.setItem(`savob_tx_${newBinId}`, JSON.stringify(data.transactions));
-    localStorage.setItem(`savob_percent_${newBinId}`, data.charityPercentage.toString());
-    localStorage.setItem(`savob_rate_${newBinId}`, data.exchangeRate.toString());
-    
+    writeCache(newBinId, data);
+
     showToast('Tizimga kirildi!');
   };
 
@@ -157,6 +242,12 @@ export default function App() {
     if (confirm("Hisobingizdan chiqmoqchimisiz? Ma'lumotlaringiz bulutda xavfsiz saqlanadi.")) {
       localStorage.removeItem('savob_bin_id');
       localStorage.removeItem('savob_password');
+      binIdRef.current = null;
+      pendingSaveRef.current = null;
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
       setBinId(null);
       setUserPassword('');
       setTransactions([]);
