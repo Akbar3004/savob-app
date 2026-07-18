@@ -1,16 +1,21 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import {
+  getRedis,
+  setCors,
+  parseBody,
+  isValidId,
+  isValidPayload,
+  KEY_PREFIX,
+  STORAGE_NOT_CONFIGURED,
+} from './_redis';
 
-const STORAGE_BASE = 'https://jsonblob.com/api/jsonBlob';
-
+/**
+ * Yangi hisob yaratish (register).
+ * POST body: { id: <parol xeshi>, data: { transactions, charityPercentage, exchangeRate } }
+ * Kalit faqat mavjud bo'lmaganda yoziladi (SET NX) — mavjud hisob ustiga yozilmaydi.
+ */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Allow CORS for local development
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-  );
+  setCors(res);
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -22,33 +27,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  const redis = getRedis();
+  if (!redis) {
+    res.status(503).json(STORAGE_NOT_CONFIGURED);
+    return;
+  }
+
+  const body = parseBody(req.body) as { id?: unknown; data?: unknown } | null;
+  const id = body?.id;
+  const data = body?.data;
+
+  if (!isValidId(id)) {
+    res.status(400).json({ error: 'Invalid id' });
+    return;
+  }
+  if (!isValidPayload(data)) {
+    res.status(400).json({ error: 'Invalid data' });
+    return;
+  }
+
   try {
-    const response = await fetch(STORAGE_BASE, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify(req.body),
-    });
+    const payload = { ...data, updatedAt: Date.now() };
+    // NX: faqat kalit mavjud bo'lmasa yozadi. Aks holda `null` qaytaradi.
+    const result = await redis.set(KEY_PREFIX + id, payload, { nx: true });
 
-    if (!response.ok) {
-      res.status(response.status).json({ error: `Failed to create bin: ${response.statusText}` });
-      return;
-    }
-
-    // jsonblob returns the new blob id in the Location header
-    const location = response.headers.get('location') || '';
-    const id = location.split('/').pop();
-
-    if (!id) {
-      res.status(500).json({ error: 'Storage did not return a bin id' });
+    if (result === null) {
+      res.status(409).json({ error: 'Already exists' });
       return;
     }
 
     res.status(200).json({ id });
   } catch (error: any) {
-    console.error('Proxy POST error:', error);
-    res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    console.error('Register error:', error);
+    res.status(500).json({ error: 'Internal Server Error', message: error?.message });
   }
 }

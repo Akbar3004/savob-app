@@ -1,113 +1,89 @@
 import { Transaction } from '../types';
 
-const REGISTRY_BIN_ID = '019f6bf3-02f7-7ca7-a20f-74b70a54e102';
+// Har bir foydalanuvchi ma'lumoti parol xeshi bo'yicha saqlanadi.
+// binId === parol xeshi (SHA-256, hex). Alohida registry kerak emas.
 const BASE_URL = '/api/bins';
+
+export interface UserData {
+  transactions: Transaction[];
+  charityPercentage: number;
+  exchangeRate: number;
+}
+
+const DEFAULT_PERCENT = 10;
+const DEFAULT_RATE = 12850;
 
 export async function hashPassword(password: string): Promise<string> {
   const msgBuffer = new TextEncoder().encode(password);
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex;
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-interface UserRegistry {
-  users: {
-    [hashedPassword: string]: string; // hashedPassword -> binId
+/** Kelgan ma'lumotni xavfsiz normal shaklga keltiradi. */
+function normalize(data: any): UserData {
+  return {
+    transactions: Array.isArray(data?.transactions) ? data.transactions : [],
+    charityPercentage:
+      typeof data?.charityPercentage === 'number' ? data.charityPercentage : DEFAULT_PERCENT,
+    exchangeRate: typeof data?.exchangeRate === 'number' ? data.exchangeRate : DEFAULT_RATE,
   };
 }
 
-async function fetchRegistry(): Promise<UserRegistry> {
-  try {
-    const res = await fetch(`${BASE_URL}/${REGISTRY_BIN_ID}`);
-    if (!res.ok) {
-      throw new Error('Registry registry fetch failed');
-    }
-    const data = await res.json();
-    return data.users ? data : { users: {} };
-  } catch (error) {
-    console.error('Error fetching registry:', error);
-    return { users: {} };
-  }
-}
-
-async function saveRegistry(registry: UserRegistry): Promise<boolean> {
-  try {
-    const res = await fetch(`${BASE_URL}/${REGISTRY_BIN_ID}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(registry),
-    });
-    return res.ok;
-  } catch (error) {
-    console.error('Error saving registry:', error);
-    return false;
-  }
-}
-
+/**
+ * Parol xeshi ro'yxatdan o'tganini tekshiradi.
+ * @returns binId (xesh) — mavjud bo'lsa; `null` — mavjud emas yoki xatolik.
+ */
 export async function checkPasswordExists(hashedPassword: string): Promise<string | null> {
-  const registry = await fetchRegistry();
-  return registry.users[hashedPassword] || null;
+  try {
+    const res = await fetch(`${BASE_URL}/${hashedPassword}`);
+    return res.ok ? hashedPassword : null;
+  } catch (error) {
+    console.error('Error checking password:', error);
+    return null;
+  }
 }
 
-export async function registerUser(hashedPassword: string, initialData: { transactions: Transaction[]; charityPercentage: number; exchangeRate: number }): Promise<string | null> {
+/**
+ * Yangi hisob yaratadi.
+ * @returns binId (xesh) — muvaffaqiyatli bo'lsa; `null` — xatolik/band bo'lsa.
+ */
+export async function registerUser(
+  hashedPassword: string,
+  initialData: UserData
+): Promise<string | null> {
   try {
-    // 1. Create a new bin for the user
     const res = await fetch(BASE_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(initialData),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: hashedPassword, data: initialData }),
     });
-    if (!res.ok) {
-      throw new Error('Failed to create user bin');
-    }
-    const result = await res.json();
-    const userBinId = result.id;
-
-    // 2. Add to registry
-    const registry = await fetchRegistry();
-    registry.users[hashedPassword] = userBinId;
-    const registrySaved = await saveRegistry(registry);
-
-    if (registrySaved) {
-      return userBinId;
-    }
-    return null;
+    return res.ok ? hashedPassword : null;
   } catch (error) {
     console.error('Error registering user:', error);
     return null;
   }
 }
 
-export async function loadUserData(binId: string): Promise<{ transactions: Transaction[]; charityPercentage: number; exchangeRate: number } | null> {
+/** Ma'lumotni bulutdan yuklaydi. Topilmasa yoki tarmoq xatosida `null`. */
+export async function loadUserData(binId: string): Promise<UserData | null> {
   try {
     const res = await fetch(`${BASE_URL}/${binId}`);
-    if (!res.ok) {
-      throw new Error('Failed to load user data');
-    }
+    if (!res.ok) return null;
     const data = await res.json();
-    return {
-      transactions: data.transactions || [],
-      charityPercentage: typeof data.charityPercentage === 'number' ? data.charityPercentage : 10,
-      exchangeRate: typeof data.exchangeRate === 'number' ? data.exchangeRate : 12850,
-    };
+    return normalize(data);
   } catch (error) {
     console.error('Error loading user data:', error);
     return null;
   }
 }
 
-export async function saveUserData(binId: string, data: { transactions: Transaction[]; charityPercentage: number; exchangeRate: number }): Promise<boolean> {
+/** Ma'lumotni bulutga yozadi. @returns muvaffaqiyat holati. */
+export async function saveUserData(binId: string, data: UserData): Promise<boolean> {
   try {
     const res = await fetch(`${BASE_URL}/${binId}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return res.ok;
