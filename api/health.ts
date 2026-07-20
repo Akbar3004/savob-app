@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getRedis, setCors, redisEnvStatus } from './_redis';
+import { getRedis, setCors, redisEnvStatus } from './_redis.js';
 
 /**
  * Diagnostika endpoint'i — sinxronlash nega ishlamayotganini aniqlash uchun.

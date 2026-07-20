@@ -7,7 +7,7 @@ import {
   isValidPayload,
   KEY_PREFIX,
   STORAGE_NOT_CONFIGURED,
-} from '../_redis';
+} from '../_redis.js';
 
 /**
  * Foydalanuvchi ma'lumotini o'qish va yozish.
