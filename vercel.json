@@ -3,6 +3,7 @@
     { "source": "/api/bins/:id", "destination": "/api/bins/[id]" },
     { "source": "/api/bins", "destination": "/api/bins" },
     { "source": "/api/rate", "destination": "/api/rate" },
+    { "source": "/api/health", "destination": "/api/health" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

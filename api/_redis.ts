@@ -16,17 +16,48 @@ const ID_RE = /^[a-f0-9]{64}$/;
 
 let cached: Redis | null | undefined;
 
+// REST URL/token o'zgaruvchilarining barcha keng tarqalgan nomlari
+// (Vercel KV, Upstash Marketplace, to'g'ridan-to'g'ri Upstash integratsiyasi).
+const URL_ENV_NAMES = [
+  'KV_REST_API_URL',
+  'UPSTASH_REDIS_REST_URL',
+  'REDIS_REST_API_URL',
+  'STORAGE_REST_API_URL',
+];
+const TOKEN_ENV_NAMES = [
+  'KV_REST_API_TOKEN',
+  'UPSTASH_REDIS_REST_TOKEN',
+  'REDIS_REST_API_TOKEN',
+  'STORAGE_REST_API_TOKEN',
+];
+
+function firstEnv(names: string[]): string | undefined {
+  for (const n of names) {
+    const v = process.env[n];
+    if (v) return v;
+  }
+  return undefined;
+}
+
 /** Muhitdan Redis mijozini oladi. Sozlanmagan bo'lsa `null` qaytaradi. */
 export function getRedis(): Redis | null {
   if (cached !== undefined) return cached;
 
-  const url =
-    process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token =
-    process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = firstEnv(URL_ENV_NAMES);
+  const token = firstEnv(TOKEN_ENV_NAMES);
 
   cached = url && token ? new Redis({ url, token }) : null;
   return cached;
+}
+
+/** Diagnostika uchun: qaysi env o'zgaruvchilari mavjudligini (qiymatsiz) qaytaradi. */
+export function redisEnvStatus(): { present: string[]; hasUrl: boolean; hasToken: boolean } {
+  const present = [...URL_ENV_NAMES, ...TOKEN_ENV_NAMES].filter((n) => !!process.env[n]);
+  return {
+    present,
+    hasUrl: !!firstEnv(URL_ENV_NAMES),
+    hasToken: !!firstEnv(TOKEN_ENV_NAMES),
+  };
 }
 
 export function isValidId(id: unknown): id is string {
