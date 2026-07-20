@@ -1,4 +1,4 @@
-import { Transaction } from '../types';
+import { Transaction, Channel } from '../types';
 
 // Har bir foydalanuvchi ma'lumoti parol xeshi bo'yicha saqlanadi.
 // binId === parol xeshi (SHA-256, hex). Alohida registry kerak emas.
@@ -12,6 +12,8 @@ export interface UserData {
   incomeGoals?: { [monthKey: string]: number };
   // Yillik sof daromad maqsadlari. Kalit: "YYYY", qiymat: so'mda maqsad summasi.
   yearlyGoals?: { [year: string]: number };
+  // Boshqa (o'zimniki bo'lmagan) kanallar ro'yxati.
+  channels?: Channel[];
   // O'chirilgan tranzaksiya id'lari (tombstone) — birlashtirishda qayta tirilmasligi uchun.
   deletedIds?: string[];
   // Oxirgi yozilgan vaqt (ms). Server har PUT'da yangilaydi; qurilmalarni solishtirishda ishlatiladi.
@@ -45,6 +47,7 @@ function normalize(data: any): UserData {
       data?.incomeGoals && typeof data.incomeGoals === 'object' ? data.incomeGoals : {},
     yearlyGoals:
       data?.yearlyGoals && typeof data.yearlyGoals === 'object' ? data.yearlyGoals : {},
+    channels: Array.isArray(data?.channels) ? data.channels : [],
     deletedIds: Array.isArray(data?.deletedIds) ? data.deletedIds : [],
     updatedAt: typeof data?.updatedAt === 'number' ? data.updatedAt : 0,
   };
@@ -69,12 +72,18 @@ export function mergeUserData(a: UserData, b: UserData): UserData {
   for (const t of older.transactions) if (!delSet.has(t.id)) byId.set(t.id, t);
   for (const t of newer.transactions) if (!delSet.has(t.id)) byId.set(t.id, t); // yangiroq nusxa ustidan yozadi
 
+  // Kanallarni id bo'yicha birlashtiramiz (yangiroq nusxadagi nom ustunlik qiladi)
+  const chanById = new Map<string, Channel>();
+  for (const c of older.channels || []) chanById.set(c.id, c);
+  for (const c of newer.channels || []) chanById.set(c.id, c);
+
   return {
     transactions: Array.from(byId.values()),
     charityPercentage: newer.charityPercentage,
     exchangeRate: newer.exchangeRate,
     incomeGoals: { ...(older.incomeGoals || {}), ...(newer.incomeGoals || {}) },
     yearlyGoals: { ...(older.yearlyGoals || {}), ...(newer.yearlyGoals || {}) },
+    channels: Array.from(chanById.values()),
     deletedIds,
     updatedAt: Math.max(aTime, bTime),
   };

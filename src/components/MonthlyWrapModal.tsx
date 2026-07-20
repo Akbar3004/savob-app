@@ -41,7 +41,8 @@ export const MonthlyWrapModal: React.FC<MonthlyWrapModalProps> = ({
       const amt = t.currency === 'USD' ? t.amount * exchangeRate : t.amount;
       totalUZS += amt;
       charityUZS += (amt * t.charityPercentage) / 100;
-      charityPercentage = t.charityPercentage;
+      // Yorliq foizi faqat ehson ushlanadigan (self) yozuvdan olinadi
+      if (t.charityPercentage > 0) charityPercentage = t.charityPercentage;
 
       catAmounts[t.category] = (catAmounts[t.category] || 0) + amt;
     });

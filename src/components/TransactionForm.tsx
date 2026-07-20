@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Check, Edit2, X, DollarSign, Banknote } from 'lucide-react';
-import { CATEGORIES, Transaction, formatUZS, formatUSD } from '../types';
+import { Plus, Check, Edit2, X, DollarSign, Banknote, User, Youtube } from 'lucide-react';
+import { CATEGORIES, Transaction, Channel, SELF_CHANNEL_ID, formatUZS, formatUSD } from '../types';
 
 interface TransactionFormProps {
   onAdd: (transaction: Omit<Transaction, 'id' | 'charityPercentage'>) => void;
@@ -9,6 +9,7 @@ interface TransactionFormProps {
   onCancelEdit: () => void;
   charityPercentage: number;
   exchangeRate: number;
+  channels: Channel[];
 }
 
 export const TransactionForm: React.FC<TransactionFormProps> = ({
@@ -18,13 +19,17 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   onCancelEdit,
   charityPercentage,
   exchangeRate,
+  channels,
 }) => {
   const [amount, setAmount] = useState<string>('');
   const [currency, setCurrency] = useState<'UZS' | 'USD'>('UZS');
   const [category, setCategory] = useState<string>('oylik');
   const [date, setDate] = useState<string>('');
   const [description, setDescription] = useState<string>('');
+  const [channelId, setChannelId] = useState<string>(SELF_CHANNEL_ID);
   const [error, setError] = useState<string>('');
+
+  const isSelf = channelId === SELF_CHANNEL_ID;
 
   useEffect(() => {
     if (!editingTransaction) {
@@ -43,15 +48,24 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       setCategory(editingTransaction.category);
       setDate(editingTransaction.date);
       setDescription(editingTransaction.description);
+      setChannelId(editingTransaction.channelId || SELF_CHANNEL_ID);
       setError('');
     } else {
       setAmount('');
       setCurrency('UZS');
       setCategory('oylik');
       setDescription('');
+      setChannelId(SELF_CHANNEL_ID);
       setError('');
     }
   }, [editingTransaction]);
+
+  // Ro'yxatdan o'chirilgan kanal tanlangan bo'lib qolmasligi uchun
+  useEffect(() => {
+    if (channelId !== SELF_CHANNEL_ID && !channels.some((c) => c.id === channelId)) {
+      setChannelId(SELF_CHANNEL_ID);
+    }
+  }, [channels, channelId]);
 
   // Keep a clean numeric string in state ("12300.50"), render it grouped ("12,300.50")
   const sanitizeAmount = (value: string, allowDecimal: boolean): string => {
@@ -109,6 +123,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       date,
       category,
       description: description.trim() || CATEGORIES.find(c => c.id === category)?.label || 'Tushum',
+      channelId,
     };
 
     if (editingTransaction) {
@@ -123,8 +138,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const currentAmountNum = parseFloat(amount || '0');
   const amountInUZS = currency === 'USD' ? currentAmountNum * exchangeRate : currentAmountNum;
   const amountInUSD = currency === 'UZS' ? currentAmountNum / exchangeRate : currentAmountNum;
-  const liveCharityUZS = (amountInUZS * charityPercentage) / 100;
-  const liveCharityUSD = (amountInUSD * charityPercentage) / 100;
+  // Ehson faqat "meniki" (self) kanaldan ushlanadi; boshqa kanallarda 0
+  const effectivePct = isSelf ? charityPercentage : 0;
+  const liveCharityUZS = (amountInUZS * effectivePct) / 100;
+  const liveCharityUSD = (amountInUSD * effectivePct) / 100;
   const liveNetUZS = amountInUZS - liveCharityUZS;
   const liveNetUSD = amountInUSD - liveCharityUSD;
 
@@ -173,6 +190,34 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Channel selector — faqat boshqa kanal(lar) mavjud bo'lsa ko'rsatiladi */}
+        {channels.length > 0 && (
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Qaysi kanal uchun
+            </label>
+            <div className="relative">
+              {isSelf ? (
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-500 pointer-events-none" />
+              ) : (
+                <Youtube className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-rose-500 pointer-events-none" />
+              )}
+              <select
+                value={channelId}
+                onChange={(e) => setChannelId(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 text-xs font-bold bg-slate-50/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-slate-700 cursor-pointer"
+              >
+                <option value={SELF_CHANNEL_ID}>Meniki (ehson ushlanadi)</option>
+                {channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} (ehsonsiz)
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
 
         {/* Amount Input */}
         <div>
@@ -250,18 +295,28 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-100/60">
-                <p className="text-[10px] text-amber-500 font-bold uppercase mb-0.5">Hayriya ({charityPercentage}%)</p>
-                <p className="text-xs font-bold text-amber-600">{formatUZS(liveCharityUZS)}</p>
-                <p className="text-[10px] font-semibold text-amber-400">{formatUSD(liveCharityUSD)}</p>
+            {isSelf ? (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-100/60">
+                  <p className="text-[10px] text-amber-500 font-bold uppercase mb-0.5">Hayriya ({charityPercentage}%)</p>
+                  <p className="text-xs font-bold text-amber-600">{formatUZS(liveCharityUZS)}</p>
+                  <p className="text-[10px] font-semibold text-amber-400">{formatUSD(liveCharityUSD)}</p>
+                </div>
+                <div className="p-3 bg-gradient-to-br from-emerald-50 to-green-50 rounded-xl border border-emerald-100/60">
+                  <p className="text-[10px] text-emerald-500 font-bold uppercase mb-0.5">Sizga qoladi</p>
+                  <p className="text-xs font-bold text-emerald-600">{formatUZS(liveNetUZS)}</p>
+                  <p className="text-[10px] font-semibold text-emerald-400">{formatUSD(liveNetUSD)}</p>
+                </div>
               </div>
-              <div className="p-3 bg-gradient-to-br from-emerald-50 to-green-50 rounded-xl border border-emerald-100/60">
-                <p className="text-[10px] text-emerald-500 font-bold uppercase mb-0.5">Sizga qoladi</p>
-                <p className="text-xs font-bold text-emerald-600">{formatUZS(liveNetUZS)}</p>
-                <p className="text-[10px] font-semibold text-emerald-400">{formatUSD(liveNetUSD)}</p>
+            ) : (
+              <div className="p-3 bg-gradient-to-br from-rose-50 to-red-50 rounded-xl border border-rose-100/60">
+                <p className="text-[10px] text-rose-500 font-bold uppercase mb-0.5">
+                  Boshqa kanal puli · ehsonsiz
+                </p>
+                <p className="text-sm font-bold text-rose-600">{formatUZS(amountInUZS)}</p>
+                <p className="text-[10px] font-semibold text-rose-400">{formatUSD(amountInUSD)}</p>
               </div>
-            </div>
+            )}
           </div>
         )}
 

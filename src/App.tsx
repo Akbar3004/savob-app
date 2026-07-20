@@ -24,8 +24,9 @@ import {
   Award,
   Sparkles,
   Gauge,
+  Youtube,
 } from 'lucide-react';
-import { Transaction, MonthlyStats, formatUZS, formatUSD, MONTH_NAMES } from './types';
+import { Transaction, MonthlyStats, Channel, formatUZS, formatUSD, MONTH_NAMES, SELF_CHANNEL_ID, isSelfTx } from './types';
 import { MetricCard } from './components/MetricCard';
 import { TransactionForm } from './components/TransactionForm';
 import { MonthlyChart } from './components/MonthlyChart';
@@ -36,6 +37,7 @@ import { ExtremesModal } from './components/ExtremesModal';
 import { ExportPDFModal } from './components/ExportPDFModal';
 import { MonthlyWrapModal } from './components/MonthlyWrapModal';
 import { IncomeGoalCard } from './components/IncomeGoalCard';
+import { ChannelsModal } from './components/ChannelsModal';
 import { saveUserData, fetchUserData, mergeUserData, hashPassword, UserData } from './services/db';
 
 export default function App() {
@@ -46,6 +48,9 @@ export default function App() {
   const [incomeGoals, setIncomeGoals] = useState<{ [monthKey: string]: number }>({});
   const [yearlyGoals, setYearlyGoals] = useState<{ [year: string]: number }>({});
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [viewScope, setViewScope] = useState<string>('all'); // 'all' | 'self' | <channelId>
+  const [isChannelsOpen, setIsChannelsOpen] = useState(false);
   const [userPassword, setUserPassword] = useState<string>('');
   
   // New States
@@ -89,6 +94,7 @@ export default function App() {
     yearGoals: `savob_yeargoals_${id}`,
     deleted: `savob_deleted_${id}`,
     updated: `savob_updated_${id}`,
+    channels: `savob_channels_${id}`,
   });
 
   const writeCache = (id: string, d: UserData) => {
@@ -100,6 +106,7 @@ export default function App() {
     localStorage.setItem(k.yearGoals, JSON.stringify(d.yearlyGoals || {}));
     localStorage.setItem(k.deleted, JSON.stringify(d.deletedIds || []));
     localStorage.setItem(k.updated, String(d.updatedAt || 0));
+    localStorage.setItem(k.channels, JSON.stringify(d.channels || []));
   };
 
   const readCache = (id: string): UserData | null => {
@@ -115,6 +122,7 @@ export default function App() {
         yearlyGoals: JSON.parse(localStorage.getItem(k.yearGoals) || '{}'),
         deletedIds: JSON.parse(localStorage.getItem(k.deleted) || '[]'),
         updatedAt: parseInt(localStorage.getItem(k.updated) || '0', 10),
+        channels: JSON.parse(localStorage.getItem(k.channels) || '[]'),
       };
     } catch {
       return null;
@@ -128,6 +136,7 @@ export default function App() {
     setIncomeGoals(d.incomeGoals || {});
     setYearlyGoals(d.yearlyGoals || {});
     setDeletedIds(d.deletedIds || []);
+    setChannels(d.channels || []);
     deletedIdsRef.current = d.deletedIds || [];
     if (d.updatedAt) lastAppliedRef.current = d.updatedAt;
   };
@@ -143,6 +152,7 @@ export default function App() {
       g: d.incomeGoals || {},
       y: d.yearlyGoals || {},
       del: [...(d.deletedIds || [])].sort(),
+      ch: [...(d.channels || [])].sort((a, b) => a.id.localeCompare(b.id)).map((c) => [c.id, c.name]),
     });
 
   const scheduleRetry = () => {
@@ -343,7 +353,8 @@ export default function App() {
     currentBinId: string,
     goals: { [monthKey: string]: number } = incomeGoals,
     yGoals: { [year: string]: number } = yearlyGoals,
-    dels: string[] = deletedIdsRef.current
+    dels: string[] = deletedIdsRef.current,
+    chans: Channel[] = channels
   ) => {
     const payload: UserData = {
       transactions: updatedTxs,
@@ -352,6 +363,7 @@ export default function App() {
       incomeGoals: goals,
       yearlyGoals: yGoals,
       deletedIds: dels,
+      channels: chans,
       updatedAt: Date.now(),
     };
 
@@ -406,6 +418,8 @@ export default function App() {
       setIncomeGoals({});
       setYearlyGoals({});
       setDeletedIds([]);
+      setChannels([]);
+      setViewScope('all');
     }
   };
 
@@ -465,6 +479,17 @@ export default function App() {
     }
   };
 
+  const handleChannelsChange = (updated: Channel[]) => {
+    setChannels(updated);
+    // Ko'rilayotgan kanal o'chirilgan bo'lsa, "Umumiy" ko'rinishga qaytamiz
+    if (viewScope !== 'all' && viewScope !== 'self' && !updated.some((c) => c.id === viewScope)) {
+      setViewScope('all');
+    }
+    if (binId) {
+      performSync(transactions, charityPercentage, exchangeRate, binId, incomeGoals, yearlyGoals, deletedIdsRef.current, updated);
+    }
+  };
+
   const handleOnlineRateFetch = async () => {
     setFetchingRate(true);
     try {
@@ -513,11 +538,15 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  // Ehson faqat "meniki" kanaldan ushlanadi — boshqa kanalda 0 saqlanadi
+  const charityForChannel = (channelId?: string) =>
+    !channelId || channelId === SELF_CHANNEL_ID ? charityPercentage : 0;
+
   const handleAddTransaction = (newTx: Omit<Transaction, 'id' | 'charityPercentage'>) => {
     const tx: Transaction = {
       ...newTx,
       id: `tx-${Date.now()}`,
-      charityPercentage,
+      charityPercentage: charityForChannel(newTx.channelId),
     };
     const updated = [tx, ...transactions];
     saveTransactions(updated);
@@ -526,7 +555,7 @@ export default function App() {
 
   const handleUpdateTransaction = (id: string, updatedTx: Omit<Transaction, 'id' | 'charityPercentage'>) => {
     const updated = transactions.map((t) =>
-      t.id === id ? { ...t, ...updatedTx } : t
+      t.id === id ? { ...t, ...updatedTx, charityPercentage: charityForChannel(updatedTx.channelId) } : t
     );
     saveTransactions(updated);
     setEditingTransaction(null);
@@ -555,19 +584,32 @@ export default function App() {
   const toUZS = (t: Transaction) => t.currency === 'USD' ? t.amount * exchangeRate : t.amount;
   const toUSD = (t: Transaction) => t.currency === 'UZS' ? t.amount / exchangeRate : t.amount;
 
+  // Ko'rish qamrovi (viewScope) bo'yicha filtrlangan tranzaksiyalar
+  // 'all' = hammasi, 'self' = faqat meniki, aks holda kanal id'si
+  const scopedTransactions = useMemo(() => {
+    if (viewScope === 'all') return transactions;
+    if (viewScope === 'self') return transactions.filter(isSelfTx);
+    return transactions.filter(t => t.channelId === viewScope);
+  }, [transactions, viewScope]);
+
   // Filter transactions by selected period
   const periodTransactions = useMemo(() => {
-    if (selectedPeriod === 'all') return transactions;
-    return transactions.filter(t => t.date.startsWith(selectedPeriod));
-  }, [transactions, selectedPeriod]);
+    if (selectedPeriod === 'all') return scopedTransactions;
+    return scopedTransactions.filter(t => t.date.startsWith(selectedPeriod));
+  }, [scopedTransactions, selectedPeriod]);
 
-  // Totals for filtered period
+  // Totals — ehson FAQAT "meniki" (self) qismidan hisoblanadi
   const totalUZS = useMemo(() => periodTransactions.reduce((sum, t) => sum + toUZS(t), 0), [periodTransactions, exchangeRate]);
   const totalUSD = useMemo(() => periodTransactions.reduce((sum, t) => sum + toUSD(t), 0), [periodTransactions, exchangeRate]);
-  const charityUZS = useMemo(() => (totalUZS * charityPercentage) / 100, [totalUZS, charityPercentage]);
-  const charityUSD = useMemo(() => (totalUSD * charityPercentage) / 100, [totalUSD, charityPercentage]);
+  const selfUZS = useMemo(() => periodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUZS(t), 0), [periodTransactions, exchangeRate]);
+  const selfUSD = useMemo(() => periodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUSD(t), 0), [periodTransactions, exchangeRate]);
+  const charityUZS = useMemo(() => (selfUZS * charityPercentage) / 100, [selfUZS, charityPercentage]);
+  const charityUSD = useMemo(() => (selfUSD * charityPercentage) / 100, [selfUSD, charityPercentage]);
+  // Sof = jami − ehson = (mening sofim) + (boshqa kanal puli)
   const netUZS = useMemo(() => totalUZS - charityUZS, [totalUZS, charityUZS]);
   const netUSD = useMemo(() => totalUSD - charityUSD, [totalUSD, charityUSD]);
+  // Ko'rinishda boshqa kanal puli bormi (kartalar matnini moslash uchun)
+  const hasOtherInView = useMemo(() => periodTransactions.some(t => !isSelfTx(t)), [periodTransactions]);
 
   // Calculate comparison with previous month for top cards
   const prevPeriod = useMemo(() => {
@@ -581,11 +623,12 @@ export default function App() {
 
   const prevPeriodTransactions = useMemo(() => {
     if (!prevPeriod) return [];
-    return transactions.filter(t => t.date.startsWith(prevPeriod));
-  }, [transactions, prevPeriod]);
+    return scopedTransactions.filter(t => t.date.startsWith(prevPeriod));
+  }, [scopedTransactions, prevPeriod]);
 
   const prevTotalUZS = useMemo(() => prevPeriodTransactions.reduce((sum, t) => sum + toUZS(t), 0), [prevPeriodTransactions, exchangeRate]);
-  const prevCharityUZS = useMemo(() => (prevTotalUZS * charityPercentage) / 100, [prevTotalUZS, charityPercentage]);
+  const prevSelfUZS = useMemo(() => prevPeriodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUZS(t), 0), [prevPeriodTransactions, exchangeRate]);
+  const prevCharityUZS = useMemo(() => (prevSelfUZS * charityPercentage) / 100, [prevSelfUZS, charityPercentage]);
   const prevNetUZS = useMemo(() => prevTotalUZS - prevCharityUZS, [prevTotalUZS, prevCharityUZS]);
 
   const totalComparePct = useMemo(() => {
@@ -619,39 +662,56 @@ export default function App() {
     return `${MONTH_NAMES[month] || month} ${year}`;
   };
 
+  // Joriy ko'rish qamrovi nomi (kartalar sarlavhasi uchun)
+  const scopeName = useMemo(() => {
+    if (viewScope === 'all') return '';
+    if (viewScope === 'self') return 'Meniki';
+    return channels.find((c) => c.id === viewScope)?.name || 'Boshqa kanal';
+  }, [viewScope, channels]);
+  const isOtherChannelView = viewScope !== 'all' && viewScope !== 'self';
+
   const monthlyStats = useMemo(() => {
-    const groups: { [key: string]: { uzs: number; usd: number; count: number } } = {};
-    transactions.forEach((t) => {
+    // Grafik ham ko'rish qamroviga (viewScope) bo'ysunadi; ehson faqat self'dan
+    const groups: { [key: string]: { uzs: number; usd: number; selfUzs: number; selfUsd: number; count: number } } = {};
+    scopedTransactions.forEach((t) => {
       const monthKey = t.date.slice(0, 7);
-      if (!groups[monthKey]) groups[monthKey] = { uzs: 0, usd: 0, count: 0 };
-      groups[monthKey].uzs += toUZS(t);
-      groups[monthKey].usd += toUSD(t);
+      if (!groups[monthKey]) groups[monthKey] = { uzs: 0, usd: 0, selfUzs: 0, selfUsd: 0, count: 0 };
+      const u = toUZS(t);
+      const d = toUSD(t);
+      groups[monthKey].uzs += u;
+      groups[monthKey].usd += d;
+      if (isSelfTx(t)) {
+        groups[monthKey].selfUzs += u;
+        groups[monthKey].selfUsd += d;
+      }
       groups[monthKey].count += 1;
     });
 
     const statsList: MonthlyStats[] = Object.keys(groups).map((monthKey) => {
       const [year, month] = monthKey.split('-');
       const monthName = MONTH_NAMES[month] ? `${MONTH_NAMES[month]} ${year}` : monthKey;
-      const total = groups[monthKey];
+      const g = groups[monthKey];
+      const charityUZS = (g.selfUzs * charityPercentage) / 100;
+      const charityUSD = (g.selfUsd * charityPercentage) / 100;
       return {
         monthKey,
         monthName,
-        totalUZS: total.uzs,
-        totalUSD: total.usd,
-        charityUZS: (total.uzs * charityPercentage) / 100,
-        charityUSD: (total.usd * charityPercentage) / 100,
-        netUZS: total.uzs - (total.uzs * charityPercentage) / 100,
-        netUSD: total.usd - (total.usd * charityPercentage) / 100,
-        transactionCount: total.count,
+        totalUZS: g.uzs,
+        totalUSD: g.usd,
+        charityUZS,
+        charityUSD,
+        netUZS: g.uzs - charityUZS,
+        netUSD: g.usd - charityUSD,
+        transactionCount: g.count,
       };
     });
 
     return statsList.sort((a, b) => a.monthKey.localeCompare(b.monthKey));
-  }, [transactions, charityPercentage, exchangeRate]);
+  }, [scopedTransactions, charityPercentage, exchangeRate]);
 
   // Export/Import backup
   const handleExportData = () => {
-    const exportData = { transactions, exchangeRate, charityPercentage, incomeGoals, yearlyGoals };
+    const exportData = { transactions, exchangeRate, charityPercentage, incomeGoals, yearlyGoals, channels };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
@@ -680,14 +740,19 @@ export default function App() {
             if (parsed.yearlyGoals && typeof parsed.yearlyGoals === 'object') {
               setYearlyGoals(parsed.yearlyGoals);
             }
-            if (binId && (parsed.incomeGoals || parsed.yearlyGoals)) {
+            if (Array.isArray(parsed.channels)) {
+              setChannels(parsed.channels);
+            }
+            if (binId && (parsed.incomeGoals || parsed.yearlyGoals || parsed.channels)) {
               performSync(
                 parsed.transactions,
                 charityPercentage,
                 exchangeRate,
                 binId,
                 parsed.incomeGoals || incomeGoals,
-                parsed.yearlyGoals || yearlyGoals
+                parsed.yearlyGoals || yearlyGoals,
+                deletedIdsRef.current,
+                Array.isArray(parsed.channels) ? parsed.channels : channels
               );
             }
             showToast("Ma'lumotlar fayldan tiklandi!", 'success');
@@ -847,24 +912,55 @@ export default function App() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 w-full">
 
-        {/* Dashboard Period Selector & Start New Month */}
+        {/* Dashboard Period Selector, Channel Scope & Start New Month */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 p-4 bg-white/60 backdrop-blur rounded-2xl border border-slate-200/50 shadow-sm">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-indigo-500" />
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Dashboard hisoboti:</span>
-            <select
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="pl-3 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 cursor-pointer"
-            >
-              <option value="all">Barcha davrlar</option>
-              {availablePeriods.map((p) => (
-                <option key={p} value={p}>{getMonthNameUz(p)}</option>
-              ))}
-            </select>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-indigo-500" />
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Davr:</span>
+              <select
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+                className="pl-3 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 cursor-pointer"
+              >
+                <option value="all">Barcha davrlar</option>
+                {availablePeriods.map((p) => (
+                  <option key={p} value={p}>{getMonthNameUz(p)}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Kanal bo'yicha ko'rish (faqat boshqa kanallar mavjud bo'lsa) */}
+            {channels.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Youtube className="w-4 h-4 text-rose-500" />
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Kanal:</span>
+                <select
+                  value={viewScope}
+                  onChange={(e) => setViewScope(e.target.value)}
+                  className="pl-3 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-bold text-slate-700 cursor-pointer"
+                >
+                  <option value="all">Umumiy (hammasi)</option>
+                  <option value="self">Faqat meniki</option>
+                  {channels.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2">
+            {/* Kanallarni boshqarish */}
+            <button
+              onClick={() => setIsChannelsOpen(true)}
+              className="py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-all active:scale-[0.98]"
+              title="Kanallarni qo'shish/tahrirlash"
+            >
+              <Youtube className="w-3.5 h-3.5 text-rose-500" />
+              Kanallar
+            </button>
+
             {/* Start New Month Button */}
             <button
               onClick={handleStartNewMonth}
@@ -898,7 +994,7 @@ export default function App() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <MetricCard
             id="metric-total"
-            title={selectedPeriod === 'all' ? "JAMI JAMG'ARMA (BARCHASI)" : `JAMI DAROMAD (${getMonthNameUz(selectedPeriod).toUpperCase()})`}
+            title={`${selectedPeriod === 'all' ? "JAMI DAROMAD" : `JAMI DAROMAD (${getMonthNameUz(selectedPeriod).toUpperCase()})`}${scopeName ? ` · ${scopeName.toUpperCase()}` : ''}`}
             valueUZS={formatUZS(totalUZS)}
             valueUSD={formatUSD(totalUSD)}
             icon={<Wallet className="w-4 h-4" />}
@@ -929,13 +1025,15 @@ export default function App() {
             delay={0.1}
           >
             <p className="text-[10px] font-bold text-amber-500 italic mt-1">
-              ❤️ Avtomatik hisoblangan ehson ulushi
+              {isOtherChannelView
+                ? '🚫 Bu kanaldan ehson ushlanmaydi'
+                : '❤️ Avtomatik hisoblangan ehson ulushi (faqat meniki)'}
             </p>
           </MetricCard>
 
           <MetricCard
             id="metric-net"
-            title="SOF SUMMA"
+            title={hasOtherInView ? "UMUMIY QO'LGA TUSHADIGAN" : isOtherChannelView ? "QO'LGA TUSHADIGAN" : "SOF SUMMA"}
             valueUZS={formatUZS(netUZS)}
             valueUSD={formatUSD(netUSD)}
             icon={<TrendingUp className="w-4 h-4" />}
@@ -945,7 +1043,7 @@ export default function App() {
             delay={0.2}
           >
             <p className="text-[10px] font-bold text-emerald-500 mt-1 uppercase tracking-wider">
-              Qo'lga tushuvchi sof miqdor
+              {hasOtherInView ? 'Mening sofim + boshqa kanal puli' : "Qo'lga tushuvchi sof miqdor"}
             </p>
           </MetricCard>
         </div>
@@ -1072,6 +1170,7 @@ export default function App() {
               onCancelEdit={() => setEditingTransaction(null)}
               charityPercentage={charityPercentage}
               exchangeRate={exchangeRate}
+              channels={channels}
             />
           </div>
           <div className="lg:col-span-2">
@@ -1082,7 +1181,7 @@ export default function App() {
         {/* Transaction History */}
         <div className="w-full">
           <TransactionList
-            transactions={transactions}
+            transactions={scopedTransactions}
             onDelete={handleDeleteTransaction}
             onEdit={(t) => {
               setEditingTransaction(t);
@@ -1090,38 +1189,47 @@ export default function App() {
             }}
             currentPercentage={charityPercentage}
             exchangeRate={exchangeRate}
+            channels={channels}
           />
         </div>
       </main>
 
-      {/* Modals */}
+      {/* Modals — joriy kanal ko'rinishiga (viewScope) mos ma'lumot bilan */}
       <StatsModal
         isOpen={isStatsOpen}
         onClose={() => setIsStatsOpen(false)}
-        transactions={transactions}
+        transactions={scopedTransactions}
         exchangeRate={exchangeRate}
       />
 
       <ExtremesModal
         isOpen={isExtremesOpen}
         onClose={() => setIsExtremesOpen(false)}
-        transactions={transactions}
+        transactions={scopedTransactions}
         exchangeRate={exchangeRate}
       />
 
       <ExportPDFModal
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
-        transactions={transactions}
+        transactions={scopedTransactions}
         exchangeRate={exchangeRate}
       />
 
       <MonthlyWrapModal
         isOpen={isWrapOpen}
         onClose={() => setIsWrapOpen(false)}
-        transactions={transactions}
+        transactions={scopedTransactions}
         monthKey={wrapMonthKey}
         exchangeRate={exchangeRate}
+      />
+
+      <ChannelsModal
+        isOpen={isChannelsOpen}
+        onClose={() => setIsChannelsOpen(false)}
+        channels={channels}
+        transactions={transactions}
+        onChange={handleChannelsChange}
       />
     </div>
   );
