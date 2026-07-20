@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Transaction, CATEGORIES, formatUZS, formatUSD } from '../types';
-import { Trash2, Edit2, Search, Filter, Calendar, DollarSign, Banknote, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Transaction, Channel, CATEGORIES, formatUZS, formatUSD, isSelfTx, SELF_CHANNEL_ID } from '../types';
+import { Trash2, Edit2, Search, Filter, Calendar, DollarSign, Banknote, ArrowUpRight, ArrowDownRight, Youtube } from 'lucide-react';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -8,6 +8,7 @@ interface TransactionListProps {
   onEdit: (transaction: Transaction) => void;
   currentPercentage: number;
   exchangeRate: number;
+  channels: Channel[];
 }
 
 export const TransactionList: React.FC<TransactionListProps> = ({
@@ -16,7 +17,12 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   onEdit,
   currentPercentage,
   exchangeRate,
+  channels,
 }) => {
+  const channelFor = (t: Transaction) => {
+    if (isSelfTx(t)) return null;
+    return channels.find((c) => c.id === t.channelId) || { id: t.channelId || '', name: 'Boshqa kanal', color: '#f43f5e' };
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedMonth, setSelectedMonth] = useState('all');
@@ -156,11 +162,14 @@ export const TransactionList: React.FC<TransactionListProps> = ({
               {filteredTransactions.map((t) => {
                 const amtUZS = getAmountInUZS(t);
                 const amtUSD = getAmountInUSD(t);
-                const charityUZS = (amtUZS * currentPercentage) / 100;
-                const charityUSD = (amtUSD * currentPercentage) / 100;
+                // Ehson faqat "meniki" yozuvdan; boshqa kanal uchun 0
+                const rowPct = isSelfTx(t) ? currentPercentage : 0;
+                const charityUZS = (amtUZS * rowPct) / 100;
+                const charityUSD = (amtUSD * rowPct) / 100;
                 const netUZS = amtUZS - charityUZS;
                 const netUSD = amtUSD - charityUSD;
                 const cat = CATEGORIES.find((c) => c.id === t.category);
+                const chan = channelFor(t);
 
                 // Row comparison percentage
                 const m = t.date.slice(0, 7);
@@ -175,7 +184,19 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                   <tr key={t.id} className="group hover:bg-indigo-50/30 transition-colors">
                     <td className="py-3.5 px-4">
                       <div className="font-semibold text-xs text-slate-800">{t.description}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5 font-mono">{t.date}</div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[10px] text-slate-400 font-mono">{t.date}</span>
+                        {chan && (
+                          <span
+                            style={{ backgroundColor: `${chan.color}18`, color: chan.color || '#f43f5e' }}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold"
+                            title="Boshqa kanal — ehsonsiz"
+                          >
+                            <Youtube className="w-2.5 h-2.5" />
+                            {chan.name}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3.5 px-4">
                       <span

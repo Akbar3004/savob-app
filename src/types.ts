@@ -6,7 +6,29 @@ export interface Transaction {
   category: string;
   description: string;
   charityPercentage: number;
+  // Qaysi kanalga tegishli: 'self' (meniki) yoki boshqa kanal id'si.
+  // Bo'sh/mavjud emas => eski yozuv, 'self' deb hisoblanadi.
+  channelId?: string;
 }
+
+// Boshqa (o'zimniki bo'lmagan) YouTube kanallari. 'self' bu ro'yxatga kirmaydi.
+export interface Channel {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+export const SELF_CHANNEL_ID = 'self';
+
+/** Tranzaksiya sizning ("meniki") daromadingizmi? Faqat 'self' dan ehson ushlanadi. */
+export function isSelfTx(t: Transaction): boolean {
+  return !t.channelId || t.channelId === SELF_CHANNEL_ID;
+}
+
+// Yangi kanallar uchun tavsiya etilgan ranglar
+export const CHANNEL_COLORS = [
+  '#0ea5e9', '#f43f5e', '#8b5cf6', '#14b8a6', '#f59e0b', '#ec4899', '#84cc16', '#6366f1',
+];
 
 export interface MonthlyStats {
   monthKey: string; // YYYY-MM

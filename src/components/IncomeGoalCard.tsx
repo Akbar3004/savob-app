@@ -12,7 +12,7 @@ import {
   CalendarDays,
   Flame,
 } from 'lucide-react';
-import { Transaction, formatUZS, formatUSD, MONTH_NAMES } from '../types';
+import { Transaction, formatUZS, formatUSD, MONTH_NAMES, isSelfTx } from '../types';
 
 interface IncomeGoalCardProps {
   transactions: Transaction[];
@@ -71,10 +71,11 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
 
   const toUZS = (t: Transaction) => (t.currency === 'USD' ? t.amount * exchangeRate : t.amount);
 
-  // Berilgan prefiks ("YYYY-MM" yoki "YYYY") bo'yicha SOF summa
+  // Berilgan prefiks ("YYYY-MM" yoki "YYYY") bo'yicha FAQAT MENING sof summam.
+  // Maqsadlar shaxsiy daromadga tegishli — boshqa kanallar puli hisobga olinmaydi.
   const netForPrefix = (prefix: string): number => {
     const totalUZS = transactions
-      .filter((t) => t.date.startsWith(prefix))
+      .filter((t) => isSelfTx(t) && t.date.startsWith(prefix))
       .reduce((sum, t) => sum + toUZS(t), 0);
     return totalUZS - (totalUZS * charityPercentage) / 100;
   };
