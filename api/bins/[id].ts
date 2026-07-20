@@ -53,9 +53,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(400).json({ error: 'Invalid data' });
         return;
       }
-      const payload = { ...body, updatedAt: Date.now() };
+      const updatedAt = Date.now();
+      const payload = { ...body, updatedAt };
       await redis.set(key, payload);
-      res.status(200).json({ ok: true });
+      res.status(200).json({ ok: true, updatedAt });
       return;
     }
 

@@ -36,7 +36,7 @@ import { ExtremesModal } from './components/ExtremesModal';
 import { ExportPDFModal } from './components/ExportPDFModal';
 import { MonthlyWrapModal } from './components/MonthlyWrapModal';
 import { IncomeGoalCard } from './components/IncomeGoalCard';
-import { saveUserData, loadUserData, hashPassword, UserData } from './services/db';
+import { saveUserData, fetchUserData, mergeUserData, hashPassword, UserData } from './services/db';
 
 export default function App() {
   const [binId, setBinId] = useState<string | null>(null);
@@ -45,6 +45,7 @@ export default function App() {
   const [exchangeRate, setExchangeRate] = useState<number>(12850);
   const [incomeGoals, setIncomeGoals] = useState<{ [monthKey: string]: number }>({});
   const [yearlyGoals, setYearlyGoals] = useState<{ [year: string]: number }>({});
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [userPassword, setUserPassword] = useState<string>('');
   
   // New States
@@ -66,6 +67,14 @@ export default function App() {
   const binIdRef = useRef<string | null>(null);
   const pendingSaveRef = useRef<UserData | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Bulutdan oxirgi qo'llangan holatning updatedAt'i — faqat yangiroq ma'lumotni qo'llash uchun
+  const lastAppliedRef = useRef<number>(0);
+  const deletedIdsRef = useRef<string[]>([]);
+  const syncingRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    deletedIdsRef.current = deletedIds;
+  }, [deletedIds]);
 
   useEffect(() => {
     binIdRef.current = binId;
@@ -78,6 +87,8 @@ export default function App() {
     rate: `savob_rate_${id}`,
     goals: `savob_goals_${id}`,
     yearGoals: `savob_yeargoals_${id}`,
+    deleted: `savob_deleted_${id}`,
+    updated: `savob_updated_${id}`,
   });
 
   const writeCache = (id: string, d: UserData) => {
@@ -87,6 +98,8 @@ export default function App() {
     localStorage.setItem(k.rate, String(d.exchangeRate));
     localStorage.setItem(k.goals, JSON.stringify(d.incomeGoals || {}));
     localStorage.setItem(k.yearGoals, JSON.stringify(d.yearlyGoals || {}));
+    localStorage.setItem(k.deleted, JSON.stringify(d.deletedIds || []));
+    localStorage.setItem(k.updated, String(d.updatedAt || 0));
   };
 
   const readCache = (id: string): UserData | null => {
@@ -100,6 +113,8 @@ export default function App() {
         exchangeRate: parseFloat(localStorage.getItem(k.rate) || '12850'),
         incomeGoals: JSON.parse(localStorage.getItem(k.goals) || '{}'),
         yearlyGoals: JSON.parse(localStorage.getItem(k.yearGoals) || '{}'),
+        deletedIds: JSON.parse(localStorage.getItem(k.deleted) || '[]'),
+        updatedAt: parseInt(localStorage.getItem(k.updated) || '0', 10),
       };
     } catch {
       return null;
@@ -112,7 +127,23 @@ export default function App() {
     setExchangeRate(d.exchangeRate);
     setIncomeGoals(d.incomeGoals || {});
     setYearlyGoals(d.yearlyGoals || {});
+    setDeletedIds(d.deletedIds || []);
+    deletedIdsRef.current = d.deletedIds || [];
+    if (d.updatedAt) lastAppliedRef.current = d.updatedAt;
   };
+
+  // Ikki holatning mazmuni bir xilligini tekshiruvchi imzo (keraksiz yozuvlarni oldini olish)
+  const dataSig = (d: UserData): string =>
+    JSON.stringify({
+      t: [...d.transactions]
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map((x) => [x.id, x.amount, x.currency, x.date, x.category, x.description]),
+      c: d.charityPercentage,
+      r: d.exchangeRate,
+      g: d.incomeGoals || {},
+      y: d.yearlyGoals || {},
+      del: [...(d.deletedIds || [])].sort(),
+    });
 
   const scheduleRetry = () => {
     if (retryTimerRef.current) return;
@@ -128,13 +159,71 @@ export default function App() {
     const payload = pendingSaveRef.current;
     if (!id || !payload) return;
     setSyncStatus('syncing');
-    const ok = await saveUserData(id, payload);
-    if (ok) {
+    const t = await saveUserData(id, payload);
+    if (t) {
       if (pendingSaveRef.current === payload) pendingSaveRef.current = null;
+      lastAppliedRef.current = t;
+      writeCache(id, { ...payload, updatedAt: t });
       setSyncStatus('synced');
     } else {
       setSyncStatus('error');
       scheduleRetry();
+    }
+  };
+
+  // Bulutdan yangilanishni tortib oladi va mahalliy holat bilan yo'qotishsiz birlashtiradi.
+  // Bu boshqa qurilmalarda kiritilgan o'zgarishlarni ushbu qurilmaga olib keladi.
+  const syncFromCloud = async () => {
+    const id = binIdRef.current;
+    if (!id || syncingRef.current) return;
+    syncingRef.current = true;
+    try {
+      const r = await fetchUserData(id);
+      if (id !== binIdRef.current) return; // orada chiqib ketilgan bo'lsa
+
+      if (r.status === 'error') {
+        // Bulutga ulanib bo'lmadi — yozilmagan o'zgarish bo'lsa qayta urinamiz, mahalliyni bosmaymiz
+        if (pendingSaveRef.current) flushPending();
+        return;
+      }
+      if (r.status === 'notfound') {
+        // Hisobda ma'lumot yo'q — mahalliy holatni yuqoriga tiklaymiz
+        if (pendingSaveRef.current) flushPending();
+        return;
+      }
+
+      const cloud = r.data;
+      const pending = pendingSaveRef.current;
+
+      if (pending) {
+        // Yuborilmagan mahalliy o'zgarish bor — bulut bilan birlashtirib, yuqoriga yozamiz
+        const merged = mergeUserData(pending, cloud);
+        applyUserData(merged);
+        pendingSaveRef.current = merged;
+        writeCache(id, merged);
+        setSyncStatus('syncing');
+        const t = await saveUserData(id, merged);
+        if (t) {
+          if (pendingSaveRef.current === merged) pendingSaveRef.current = null;
+          lastAppliedRef.current = t;
+          writeCache(id, { ...merged, updatedAt: t });
+          setSyncStatus('synced');
+        } else {
+          setSyncStatus('error');
+          scheduleRetry();
+        }
+        return;
+      }
+
+      // Yuborilmagan o'zgarish yo'q — faqat bulut yangiroq bo'lsa qo'llaymiz
+      if ((cloud.updatedAt || 0) > lastAppliedRef.current) {
+        applyUserData(cloud);
+        lastAppliedRef.current = cloud.updatedAt || 0;
+        writeCache(id, cloud);
+      }
+      setSyncStatus('synced');
+    } finally {
+      syncingRef.current = false;
     }
   };
 
@@ -171,18 +260,44 @@ export default function App() {
         writeCache(id, cache); // eski kalitdagi keshni yangi kalitga ko'chiramiz
       }
 
-      // 2) Barqaror bulutdan fonda sinxronlash
-      const cloud = await loadUserData(id);
+      // 2) Barqaror bulutdan yuklab, mahalliy nusxa bilan yo'qotishsiz birlashtiramiz
+      const res = await fetchUserData(id);
       if (cancelled) return;
 
-      if (cloud) {
-        applyUserData(cloud);
-        writeCache(id, cloud);
-        setSyncStatus('synced');
-      } else if (cache) {
-        // Bulutda ma'lumot yo'q / ulanib bo'lmadi — mahalliy nusxadan qayta tiklaymiz
-        pendingSaveRef.current = cache;
-        flushPending();
+      if (res.status === 'ok') {
+        const cloud = res.data;
+        if (cache) {
+          // Ikkala qurilmadagi o'zgarishlarni birlashtiramiz (hech biri yo'qolmaydi)
+          const merged = mergeUserData(cache, cloud);
+          applyUserData(merged);
+          writeCache(id, merged);
+          lastAppliedRef.current = cloud.updatedAt || 0;
+          // Agar mahalliyda bulutda yo'q narsa bo'lsa — yuqoriga yozamiz
+          if (dataSig(merged) !== dataSig(cloud)) {
+            pendingSaveRef.current = merged;
+            flushPending();
+          } else {
+            setSyncStatus('synced');
+          }
+        } else {
+          applyUserData(cloud);
+          writeCache(id, cloud);
+          lastAppliedRef.current = cloud.updatedAt || 0;
+          setSyncStatus('synced');
+        }
+      } else if (res.status === 'notfound') {
+        // Bulutda ma'lumot yo'q — mahalliy nusxadan qayta tiklaymiz
+        if (cache) {
+          pendingSaveRef.current = cache;
+          flushPending();
+        }
+      } else {
+        // Tarmoq/server xatosi — mahalliy nusxa bilan davom etamiz, bosib o'tmaymiz
+        if (cache) {
+          pendingSaveRef.current = cache;
+          setSyncStatus('error');
+          scheduleRetry();
+        }
       }
     })();
 
@@ -191,19 +306,34 @@ export default function App() {
     };
   }, []);
 
-  // Tarmoq qaytganda yoki ilovaga qaytilganda kutilayotgan o'zgarishlarni yuboramiz
+  // Boshqa qurilmalardagi o'zgarishlarni olib kelish uchun:
+  //  - har 20 soniyada bulutdan tekshiramiz (faqat ilova ko'rinib turganda)
+  //  - tab'ga qaytilganda, oyna fokus olganda va tarmoq tiklanganda darhol tekshiramiz
   useEffect(() => {
-    const onOnline = () => flushPending();
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') flushPending();
+    if (!binId) return;
+
+    const tick = () => {
+      if (document.visibilityState === 'visible') syncFromCloud();
     };
+
+    const onOnline = () => syncFromCloud();
+    const onFocus = () => syncFromCloud();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') syncFromCloud();
+    };
+
+    const intervalId = setInterval(tick, 20000);
     window.addEventListener('online', onOnline);
+    window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisible);
+
     return () => {
+      clearInterval(intervalId);
       window.removeEventListener('online', onOnline);
+      window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, []);
+  }, [binId]);
 
   // O'zgarishlarni saqlash: avval mahalliy kesh (kafolatli), keyin bulut (xatoda qayta urinish)
   const performSync = async (
@@ -212,7 +342,8 @@ export default function App() {
     rate: number,
     currentBinId: string,
     goals: { [monthKey: string]: number } = incomeGoals,
-    yGoals: { [year: string]: number } = yearlyGoals
+    yGoals: { [year: string]: number } = yearlyGoals,
+    dels: string[] = deletedIdsRef.current
   ) => {
     const payload: UserData = {
       transactions: updatedTxs,
@@ -220,15 +351,19 @@ export default function App() {
       exchangeRate: rate,
       incomeGoals: goals,
       yearlyGoals: yGoals,
+      deletedIds: dels,
+      updatedAt: Date.now(),
     };
 
     writeCache(currentBinId, payload);
     pendingSaveRef.current = payload;
 
     setSyncStatus('syncing');
-    const ok = await saveUserData(currentBinId, payload);
-    if (ok) {
+    const t = await saveUserData(currentBinId, payload);
+    if (t) {
       if (pendingSaveRef.current === payload) pendingSaveRef.current = null;
+      lastAppliedRef.current = t;
+      writeCache(currentBinId, { ...payload, updatedAt: t });
       setSyncStatus('synced');
     } else {
       setSyncStatus('error');
@@ -263,9 +398,14 @@ export default function App() {
         clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
       }
+      lastAppliedRef.current = 0;
+      deletedIdsRef.current = [];
       setBinId(null);
       setUserPassword('');
       setTransactions([]);
+      setIncomeGoals({});
+      setYearlyGoals({});
+      setDeletedIds([]);
     }
   };
 
@@ -396,7 +536,16 @@ export default function App() {
   const handleDeleteTransaction = (id: string) => {
     if (confirm("Ushbu tushumni ro'yxatdan o'chirmoqchimisiz?")) {
       const updated = transactions.filter((t) => t.id !== id);
-      saveTransactions(updated);
+      // Tombstone: o'chirilgan id boshqa qurilma bilan birlashganda qayta tirilmasligi uchun
+      const newDeleted = deletedIdsRef.current.includes(id)
+        ? deletedIdsRef.current
+        : [...deletedIdsRef.current, id];
+      setTransactions(updated);
+      setDeletedIds(newDeleted);
+      deletedIdsRef.current = newDeleted;
+      if (binId) {
+        performSync(updated, charityPercentage, exchangeRate, binId, incomeGoals, yearlyGoals, newDeleted);
+      }
       showToast("Kirim ro'yxatdan o'chirildi.", 'info');
       if (editingTransaction?.id === id) setEditingTransaction(null);
     }
