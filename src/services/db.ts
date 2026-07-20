@@ -8,6 +8,8 @@ export interface UserData {
   transactions: Transaction[];
   charityPercentage: number;
   exchangeRate: number;
+  // Oyma-oy sof daromad maqsadlari. Kalit: "YYYY-MM", qiymat: so'mda maqsad summasi.
+  incomeGoals?: { [monthKey: string]: number };
 }
 
 const DEFAULT_PERCENT = 10;
@@ -27,6 +29,8 @@ function normalize(data: any): UserData {
     charityPercentage:
       typeof data?.charityPercentage === 'number' ? data.charityPercentage : DEFAULT_PERCENT,
     exchangeRate: typeof data?.exchangeRate === 'number' ? data.exchangeRate : DEFAULT_RATE,
+    incomeGoals:
+      data?.incomeGoals && typeof data.incomeGoals === 'object' ? data.incomeGoals : {},
   };
 }
 

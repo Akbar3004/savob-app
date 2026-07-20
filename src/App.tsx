@@ -35,6 +35,7 @@ import { StatsModal } from './components/StatsModal';
 import { ExtremesModal } from './components/ExtremesModal';
 import { ExportPDFModal } from './components/ExportPDFModal';
 import { MonthlyWrapModal } from './components/MonthlyWrapModal';
+import { IncomeGoalCard } from './components/IncomeGoalCard';
 import { saveUserData, loadUserData, hashPassword, UserData } from './services/db';
 
 export default function App() {
@@ -42,6 +43,7 @@ export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [charityPercentage, setCharityPercentage] = useState<number>(10);
   const [exchangeRate, setExchangeRate] = useState<number>(12850);
+  const [incomeGoals, setIncomeGoals] = useState<{ [monthKey: string]: number }>({});
   const [userPassword, setUserPassword] = useState<string>('');
   
   // New States
@@ -73,6 +75,7 @@ export default function App() {
     tx: `savob_tx_${id}`,
     percent: `savob_percent_${id}`,
     rate: `savob_rate_${id}`,
+    goals: `savob_goals_${id}`,
   });
 
   const writeCache = (id: string, d: UserData) => {
@@ -80,6 +83,7 @@ export default function App() {
     localStorage.setItem(k.tx, JSON.stringify(d.transactions));
     localStorage.setItem(k.percent, String(d.charityPercentage));
     localStorage.setItem(k.rate, String(d.exchangeRate));
+    localStorage.setItem(k.goals, JSON.stringify(d.incomeGoals || {}));
   };
 
   const readCache = (id: string): UserData | null => {
@@ -91,6 +95,7 @@ export default function App() {
         transactions: JSON.parse(tx),
         charityPercentage: parseInt(localStorage.getItem(k.percent) || '10', 10),
         exchangeRate: parseFloat(localStorage.getItem(k.rate) || '12850'),
+        incomeGoals: JSON.parse(localStorage.getItem(k.goals) || '{}'),
       };
     } catch {
       return null;
@@ -101,6 +106,7 @@ export default function App() {
     setTransactions(d.transactions);
     setCharityPercentage(d.charityPercentage);
     setExchangeRate(d.exchangeRate);
+    setIncomeGoals(d.incomeGoals || {});
   };
 
   const scheduleRetry = () => {
@@ -199,12 +205,14 @@ export default function App() {
     updatedTxs: Transaction[],
     percent: number,
     rate: number,
-    currentBinId: string
+    currentBinId: string,
+    goals: { [monthKey: string]: number } = incomeGoals
   ) => {
     const payload: UserData = {
       transactions: updatedTxs,
       charityPercentage: percent,
       exchangeRate: rate,
+      incomeGoals: goals,
     };
 
     writeCache(currentBinId, payload);
@@ -273,6 +281,23 @@ export default function App() {
     setExchangeRate(val);
     if (binId) {
       performSync(transactions, charityPercentage, val, binId);
+    }
+  };
+
+  const handleSetIncomeGoal = (monthKey: string, value: number) => {
+    const updatedGoals = { ...incomeGoals };
+    if (value > 0) {
+      updatedGoals[monthKey] = value;
+    } else {
+      delete updatedGoals[monthKey];
+    }
+    setIncomeGoals(updatedGoals);
+    showToast(
+      value > 0 ? 'Oylik daromad maqsadi saqlandi!' : 'Oylik maqsad olib tashlandi.',
+      value > 0 ? 'success' : 'info'
+    );
+    if (binId) {
+      performSync(transactions, charityPercentage, exchangeRate, binId, updatedGoals);
     }
   };
 
@@ -453,7 +478,7 @@ export default function App() {
 
   // Export/Import backup
   const handleExportData = () => {
-    const exportData = { transactions, exchangeRate, charityPercentage };
+    const exportData = { transactions, exchangeRate, charityPercentage, incomeGoals };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
@@ -476,6 +501,10 @@ export default function App() {
             saveTransactions(parsed.transactions);
             if (parsed.exchangeRate) handleExchangeRateChange(parsed.exchangeRate);
             if (parsed.charityPercentage) handlePercentageChange(parsed.charityPercentage);
+            if (parsed.incomeGoals && typeof parsed.incomeGoals === 'object') {
+              setIncomeGoals(parsed.incomeGoals);
+              if (binId) performSync(parsed.transactions, charityPercentage, exchangeRate, binId, parsed.incomeGoals);
+            }
             showToast("Ma'lumotlar fayldan tiklandi!", 'success');
           } else if (Array.isArray(parsed)) {
             saveTransactions(parsed);
@@ -661,6 +690,22 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {/* Oylik daromad maqsadi kartasi */}
+        {(() => {
+          const goalMonthKey =
+            selectedPeriod === 'all' ? new Date().toISOString().slice(0, 7) : selectedPeriod;
+          return (
+            <IncomeGoalCard
+              transactions={transactions}
+              charityPercentage={charityPercentage}
+              exchangeRate={exchangeRate}
+              monthKey={goalMonthKey}
+              goal={incomeGoals[goalMonthKey] || 0}
+              onSetGoal={handleSetIncomeGoal}
+            />
+          );
+        })()}
 
         {/* Metric Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
