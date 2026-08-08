@@ -23,15 +23,22 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     if (isSelfTx(t)) return null;
     return channels.find((c) => c.id === t.channelId) || { id: t.channelId || '', name: 'Boshqa kanal', color: '#f43f5e' };
   };
+  const currentMonth = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedMonth, setSelectedMonth] = useState('all');
+  // Ro'yxat har oy boshida yangilanadi: sukut bo'yicha faqat joriy oy ko'rinadi.
+  // Eski oylar tarixda saqlanadi va pastdagi tanlagichdan ochiladi.
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
 
   const uniqueMonths = useMemo(() => {
-    return (Array.from(
-      new Set(transactions.map((t) => t.date.slice(0, 7)))
-    ) as string[]).sort((a, b) => b.localeCompare(a));
-  }, [transactions]);
+    const set = new Set(transactions.map((t) => t.date.slice(0, 7)));
+    set.add(currentMonth); // joriy oy bo'sh bo'lsa ham tanlanadigan bo'lib qolsin
+    return (Array.from(set) as string[]).sort((a, b) => b.localeCompare(a));
+  }, [transactions, currentMonth]);
 
   const getMonthNameUz = (monthStr: string) => {
     const [year, month] = monthStr.split('-');
@@ -43,17 +50,26 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     return `${monthsUz[month] || month} ${year}`;
   };
 
+  /** Bir xil sanadagi yozuvlarni tartiblash uchun id ichidagi vaqt tamg'asi. */
+  const idStamp = (id: string) => {
+    const digits = id.replace(/\D/g, '');
+    return digits ? Number(digits) : 0;
+  };
+
   const filteredTransactions = useMemo(() => {
-    return transactions.filter((t) => {
-      const matchesSearch =
-        t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        CATEGORIES.find((c) => c.id === t.category)
-          ?.label.toLowerCase()
-          .includes(searchTerm.toLowerCase());
-      const matchesCategory = selectedCategory === 'all' || t.category === selectedCategory;
-      const matchesMonth = selectedMonth === 'all' || t.date.startsWith(selectedMonth);
-      return matchesSearch && matchesCategory && matchesMonth;
-    });
+    return transactions
+      .filter((t) => {
+        const matchesSearch =
+          t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          CATEGORIES.find((c) => c.id === t.category)
+            ?.label.toLowerCase()
+            .includes(searchTerm.toLowerCase());
+        const matchesCategory = selectedCategory === 'all' || t.category === selectedCategory;
+        const matchesMonth = selectedMonth === 'all' || t.date.startsWith(selectedMonth);
+        return matchesSearch && matchesCategory && matchesMonth;
+      })
+      // Eng yangi sana yuqorida; bir xil sanada esa keyin kiritilgani yuqorida
+      .sort((a, b) => b.date.localeCompare(a.date) || idStamp(b.id) - idStamp(a.id));
   }, [transactions, searchTerm, selectedCategory, selectedMonth]);
 
   const getAmountInUZS = (t: Transaction) => t.currency === 'USD' ? t.amount * exchangeRate : t.amount;
@@ -68,27 +84,31 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     return `${prevYear}-${prevMonth}`;
   };
 
-  // Pre-calculate month averages
-  const monthAverages = useMemo(() => {
-    const sums: { [month: string]: number } = {};
-    const counts: { [month: string]: number } = {};
-    
+  /** Yozuv qaysi kanalga tegishli (kalit sifatida). Eski yozuvlar — 'self'. */
+  const channelKey = (t: Transaction) => t.channelId || SELF_CHANNEL_ID;
+
+  // Har bir KANAL uchun alohida oylik o'rtacha.
+  // Kalit: "<kanal>|<YYYY-MM>" — shunda har bir kanal faqat o'zi bilan solishtiriladi.
+  const channelMonthAverages = useMemo(() => {
+    const sums: { [key: string]: number } = {};
+    const counts: { [key: string]: number } = {};
+
     transactions.forEach((t) => {
-      const m = t.date.slice(0, 7);
+      const key = `${channelKey(t)}|${t.date.slice(0, 7)}`;
       const amtUZS = t.currency === 'USD' ? t.amount * exchangeRate : t.amount;
-      sums[m] = (sums[m] || 0) + amtUZS;
-      counts[m] = (counts[m] || 0) + 1;
+      sums[key] = (sums[key] || 0) + amtUZS;
+      counts[key] = (counts[key] || 0) + 1;
     });
 
-    const avgs: { [month: string]: number } = {};
-    Object.keys(sums).forEach((m) => {
-      avgs[m] = sums[m] / counts[m];
+    const avgs: { [key: string]: number } = {};
+    Object.keys(sums).forEach((k) => {
+      avgs[k] = sums[k] / counts[k];
     });
     return avgs;
   }, [transactions, exchangeRate]);
 
   return (
-    <div className="card-3d p-6 flex flex-col h-full">
+    <div className="card-glow p-6 flex flex-col h-full">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h3 className="font-display font-bold text-slate-800 text-lg">Kundalik tushumlar tarixi</h3>
@@ -139,9 +159,15 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       {/* Transaction List */}
       {filteredTransactions.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center min-h-[220px] bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-8">
-          <p className="text-sm font-semibold text-slate-500">Hech qanday ma'lumot topilmadi</p>
+          <p className="text-sm font-semibold text-slate-500">
+            {selectedMonth === currentMonth && searchTerm === '' && selectedCategory === 'all'
+              ? 'Bu oy hali tushum kiritilmagan'
+              : "Hech qanday ma'lumot topilmadi"}
+          </p>
           <p className="text-xs text-slate-400 mt-1 text-center max-w-xs">
-            Filtr sozlamalarini o'zgartiring yoki birinchi tushumni qo'shing.
+            {selectedMonth === currentMonth && searchTerm === '' && selectedCategory === 'all'
+              ? "Yangi oy boshlandi. Oldingi oylar tarixi «oylar» ro'yxatidan ochiladi."
+              : "Filtr sozlamalarini o'zgartiring yoki birinchi tushumni qo'shing."}
           </p>
         </div>
       ) : (
@@ -171,10 +197,11 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 const cat = CATEGORIES.find((c) => c.id === t.category);
                 const chan = channelFor(t);
 
-                // Row comparison percentage
-                const m = t.date.slice(0, 7);
-                const prevM = getPrevMonthStr(m);
-                const prevAvg = monthAverages[prevM];
+                // Taqqoslash: shu yozuv AYNAN O'Z kanalining o'tgan oydagi
+                // o'rtachasi bilan solishtiriladi (boshqa kanallar aralashmaydi).
+                const prevM = getPrevMonthStr(t.date.slice(0, 7));
+                const prevAvg = channelMonthAverages[`${channelKey(t)}|${prevM}`];
+                const scopeName = chan ? chan.name : 'meniki';
                 let diffPct: number | null = null;
                 if (prevAvg && prevAvg > 0) {
                   diffPct = ((amtUZS - prevAvg) / prevAvg) * 100;
@@ -226,11 +253,16 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                       
                       {/* Row percentage comparison */}
                       {diffPct !== null && (
-                        <div className={`text-[9px] font-bold mt-0.5 flex items-center justify-end gap-0.5 ${
-                          diffPct >= 0 ? 'text-emerald-600' : 'text-rose-500'
-                        }`}>
+                        <div
+                          className={`text-[9px] font-bold mt-0.5 flex items-center justify-end gap-0.5 ${
+                            diffPct >= 0 ? 'text-emerald-600' : 'text-rose-500'
+                          }`}
+                          title={`«${scopeName}» ning o'tgan oydagi o'rtacha tushumiga nisbatan`}
+                        >
                           {diffPct >= 0 ? <ArrowUpRight className="w-2.5 h-2.5" /> : <ArrowDownRight className="w-2.5 h-2.5" />}
-                          <span>{diffPct >= 0 ? '+' : ''}{diffPct.toFixed(1)}% vs o'tgan oy o'rtachasi</span>
+                          <span>
+                            {diffPct >= 0 ? '+' : ''}{diffPct.toFixed(1)}% vs {scopeName} o'tgan oy o'rt.
+                          </span>
                         </div>
                       )}
                     </td>
