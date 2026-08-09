@@ -12,12 +12,13 @@ import {
   CalendarDays,
   Flame,
 } from 'lucide-react';
-import { Transaction, formatUZS, formatUSD, MONTH_NAMES, isSelfTx } from '../types';
+import { Transaction, Payouts, formatUZS, formatUSD, MONTH_NAMES, isSelfTx, txUZS, rateForMonth } from '../types';
 
 interface IncomeGoalCardProps {
   transactions: Transaction[];
   charityPercentage: number;
   exchangeRate: number;
+  payouts: Payouts;
   monthKey: string; // "YYYY-MM" — maqsad qo'yiladigan oy
   incomeGoals: { [monthKey: string]: number }; // barcha oylik maqsadlar (streak uchun)
   yearlyGoals: { [year: string]: number }; // yillik maqsadlar
@@ -46,6 +47,7 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
   transactions,
   charityPercentage,
   exchangeRate,
+  payouts,
   monthKey,
   incomeGoals,
   yearlyGoals,
@@ -69,7 +71,9 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
     setYearDraft('');
   }, [monthKey, goal, yearlyGoal]);
 
-  const toUZS = (t: Transaction) => (t.currency === 'USD' ? t.amount * exchangeRate : t.amount);
+  const toUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate);
+  // Shu oyning so'm/dollar nisbati — to'lov kelgan bo'lsa qotgan kurs bo'yicha
+  const monthRate = rateForMonth(monthKey, payouts, exchangeRate);
 
   // Berilgan prefiks ("YYYY-MM" yoki "YYYY") bo'yicha FAQAT MENING sof summam.
   // Maqsadlar shaxsiy daromadga tegishli — boshqa kanallar puli hisobga olinmaydi.
@@ -82,18 +86,19 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
 
   const netThisMonthUZS = useMemo(
     () => netForPrefix(monthKey),
-    [transactions, monthKey, charityPercentage, exchangeRate]
+    [transactions, monthKey, charityPercentage, exchangeRate, payouts]
   );
 
   const prevMonthKey = useMemo(() => getPrevMonthKey(monthKey), [monthKey]);
+  const prevMonthRate = rateForMonth(prevMonthKey, payouts, exchangeRate);
   const netPrevMonthUZS = useMemo(
     () => netForPrefix(prevMonthKey),
-    [transactions, prevMonthKey, charityPercentage, exchangeRate]
+    [transactions, prevMonthKey, charityPercentage, exchangeRate, payouts]
   );
 
   const netThisYearUZS = useMemo(
     () => netForPrefix(year),
-    [transactions, year, charityPercentage, exchangeRate]
+    [transactions, year, charityPercentage, exchangeRate, payouts]
   );
 
   const remainingUZS = Math.max(goal - netThisMonthUZS, 0);
@@ -135,7 +140,7 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
       cursor = getPrevMonthKey(cursor);
     }
     return count;
-  }, [monthKey, incomeGoals, transactions, charityPercentage, exchangeRate]);
+  }, [monthKey, incomeGoals, transactions, charityPercentage, exchangeRate, payouts]);
 
   const startEdit = () => {
     setDraft(goal > 0 ? String(goal) : '');
@@ -225,7 +230,7 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
           </div>
           {parseFloat(sanitize(draft)) > 0 && (
             <p className="text-[10px] text-slate-400 font-semibold mt-1.5 pl-1">
-              ≈ {formatUSD(parseFloat(sanitize(draft)) / exchangeRate)}
+              ≈ {formatUSD(parseFloat(sanitize(draft)) / monthRate)}
             </p>
           )}
           <div className="flex gap-2 mt-3">
@@ -275,7 +280,7 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
                 {formatUZS(goal)}
               </h4>
               <p className="text-xs font-bold text-indigo-500 font-display mt-0.5">
-                {formatUSD(goal / exchangeRate)}
+                {formatUSD(goal / monthRate)}
               </p>
 
               {/* Progress bar */}
@@ -309,7 +314,7 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
                     {formatUZS(remainingUZS)}
                   </p>
                   <p className="text-[11px] font-bold text-fuchsia-400">
-                    {formatUSD(remainingUZS / exchangeRate)}
+                    {formatUSD(remainingUZS / monthRate)}
                   </p>
                 </div>
               )}
@@ -330,7 +335,7 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
                 {formatUZS(netPrevMonthUZS)}
               </h4>
               <p className="text-xs font-bold text-indigo-500 font-display mt-0.5">
-                {formatUSD(netPrevMonthUZS / exchangeRate)}
+                {formatUSD(netPrevMonthUZS / prevMonthRate)}
               </p>
 
               {/* Joriy oy sof daromadi (maqsad bilan solishtirish uchun) */}
@@ -342,7 +347,7 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
                   {formatUZS(netThisMonthUZS)}
                 </p>
                 <p className="text-[10px] font-semibold text-emerald-400">
-                  {formatUSD(netThisMonthUZS / exchangeRate)}
+                  {formatUSD(netThisMonthUZS / monthRate)}
                 </p>
               </div>
             </div>
@@ -367,7 +372,7 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
                     {formatUZS(tempo.dailyUZS)}
                   </p>
                   <p className="text-[10px] font-semibold text-indigo-400">
-                    {formatUSD(tempo.dailyUZS / exchangeRate)}
+                    {formatUSD(tempo.dailyUZS / monthRate)}
                   </p>
                 </div>
                 <div className="p-3 bg-white/70 rounded-xl border border-indigo-100/60">
@@ -379,7 +384,7 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
                     {formatUZS(tempo.weeklyUZS)}
                   </p>
                   <p className="text-[10px] font-semibold text-fuchsia-400">
-                    {formatUSD(tempo.weeklyUZS / exchangeRate)}
+                    {formatUSD(tempo.weeklyUZS / monthRate)}
                   </p>
                 </div>
               </div>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Download, TrendingUp, Heart, Wallet, CalendarDays, Layers, Sparkles } from 'lucide-react';
-import { Transaction, CATEGORIES, formatUSD, MONTH_NAMES } from '../types';
+import { Transaction, Payouts, CATEGORIES, formatUSD, MONTH_NAMES, txUZS, rateForMonth, isSettled } from '../types';
 import { jsPDF } from 'jspdf';
 
 interface MonthlyWrapModalProps {
@@ -10,6 +10,7 @@ interface MonthlyWrapModalProps {
   transactions: Transaction[];
   monthKey: string; // YYYY-MM
   exchangeRate: number;
+  payouts: Payouts;
 }
 
 /** Raqamni ming ajratgichlari bilan formatlaydi ("15 174 120"). */
@@ -73,6 +74,7 @@ export const MonthlyWrapModal: React.FC<MonthlyWrapModalProps> = ({
   transactions,
   monthKey,
   exchangeRate,
+  payouts,
 }) => {
   const monthName = React.useMemo(() => {
     const [year, month] = monthKey.split('-');
@@ -86,8 +88,9 @@ export const MonthlyWrapModal: React.FC<MonthlyWrapModalProps> = ({
   }, [monthKey]);
 
   const stats = React.useMemo(() => {
-    const toUZS = (t: Transaction) =>
-      t.currency === 'USD' ? t.amount * exchangeRate : t.amount;
+    const toUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate);
+    // Bu oyning so'm/dollar nisbati — to'lov kelgan bo'lsa qotgan kurs bo'yicha
+    const monthRate = rateForMonth(monthKey, payouts, exchangeRate);
 
     const monthTx = transactions.filter((t) => t.date.startsWith(monthKey));
 
@@ -136,11 +139,11 @@ export const MonthlyWrapModal: React.FC<MonthlyWrapModalProps> = ({
 
     return {
       totalUZS,
-      totalUSD: totalUZS / exchangeRate,
+      totalUSD: totalUZS / monthRate,
       charityUZS,
-      charityUSD: charityUZS / exchangeRate,
+      charityUSD: charityUZS / monthRate,
       netUZS,
-      netUSD: netUZS / exchangeRate,
+      netUSD: netUZS / monthRate,
       charityPercentage,
       categories,
       growthPct,
@@ -149,8 +152,9 @@ export const MonthlyWrapModal: React.FC<MonthlyWrapModalProps> = ({
       avgPerDay,
       count: monthTx.length,
       rank: resolveRank(charityUZS),
+      settled: isSettled(monthKey, payouts),
     };
-  }, [transactions, monthKey, prevMonthKey, exchangeRate]);
+  }, [transactions, monthKey, prevMonthKey, exchangeRate, payouts]);
 
   // ─────────────────────────────────────────────────────────────
   // PDF: emoji ishlatilmaydi (standart shriftlar uni buzib chizadi) —

@@ -12,6 +12,9 @@ Kunlik daromadlarni kiritish, jamg'armani kuzatish, belgilangan foizda hayriya (
 - ☁️ Parol asosida **doimiy** bulutda sinxronlash (Upstash Redis) — ma'lumot o'chib ketmaydi
 - 📴 localStorage kesh: oflayn ishlaydi, tarmoq tiklanganda avtomatik qayta yuboradi (hech qachon yo'qolmaydi)
 - 💱 O'zbekiston Markaziy banki (CBU) dan jonli USD kursi
+- 🧾 Oylik to'lov kursi: daromad ishlangan oydan keyin to'langani uchun har bir
+  ish oyi o'z to'lov kursi bilan hisoblanadi. Kurs kiritilgach o'sha oyning
+  hisoblari qotib qoladi; kiritilmagan oylar "taxminiy" deb belgilanadi
 
 ## Texnologiyalar
 
