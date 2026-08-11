@@ -25,8 +25,9 @@ import {
   Sparkles,
   Gauge,
   Youtube,
+  Banknote,
 } from 'lucide-react';
-import { Transaction, MonthlyStats, Channel, formatUZS, formatUSD, MONTH_NAMES, SELF_CHANNEL_ID, isSelfTx } from './types';
+import { Transaction, MonthlyStats, Channel, Payouts, formatUZS, formatUSD, MONTH_NAMES, SELF_CHANNEL_ID, isSelfTx, txUZS, txUSD, isSettled } from './types';
 import { MetricCard } from './components/MetricCard';
 import { TransactionForm } from './components/TransactionForm';
 import { MonthlyChart } from './components/MonthlyChart';
@@ -38,6 +39,7 @@ import { ExportPDFModal } from './components/ExportPDFModal';
 import { MonthlyWrapModal } from './components/MonthlyWrapModal';
 import { IncomeGoalCard } from './components/IncomeGoalCard';
 import { ChannelsModal } from './components/ChannelsModal';
+import { PayoutsModal } from './components/PayoutsModal';
 import { saveUserData, fetchUserData, mergeUserData, hashPassword, UserData } from './services/db';
 
 export default function App() {
@@ -49,6 +51,8 @@ export default function App() {
   const [yearlyGoals, setYearlyGoals] = useState<{ [year: string]: number }>({});
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [payouts, setPayouts] = useState<Payouts>({});
+  const [isPayoutsOpen, setIsPayoutsOpen] = useState(false);
   const [viewScope, setViewScope] = useState<string>('all'); // 'all' | 'self' | <channelId>
   const [isChannelsOpen, setIsChannelsOpen] = useState(false);
   const [userPassword, setUserPassword] = useState<string>('');
@@ -95,6 +99,7 @@ export default function App() {
     deleted: `savob_deleted_${id}`,
     updated: `savob_updated_${id}`,
     channels: `savob_channels_${id}`,
+    payouts: `savob_payouts_${id}`,
   });
 
   const writeCache = (id: string, d: UserData) => {
@@ -107,6 +112,7 @@ export default function App() {
     localStorage.setItem(k.deleted, JSON.stringify(d.deletedIds || []));
     localStorage.setItem(k.updated, String(d.updatedAt || 0));
     localStorage.setItem(k.channels, JSON.stringify(d.channels || []));
+    localStorage.setItem(k.payouts, JSON.stringify(d.payouts || {}));
   };
 
   const readCache = (id: string): UserData | null => {
@@ -123,6 +129,7 @@ export default function App() {
         deletedIds: JSON.parse(localStorage.getItem(k.deleted) || '[]'),
         updatedAt: parseInt(localStorage.getItem(k.updated) || '0', 10),
         channels: JSON.parse(localStorage.getItem(k.channels) || '[]'),
+        payouts: JSON.parse(localStorage.getItem(k.payouts) || '{}'),
       };
     } catch {
       return null;
@@ -137,6 +144,7 @@ export default function App() {
     setYearlyGoals(d.yearlyGoals || {});
     setDeletedIds(d.deletedIds || []);
     setChannels(d.channels || []);
+    setPayouts(d.payouts || {});
     deletedIdsRef.current = d.deletedIds || [];
     if (d.updatedAt) lastAppliedRef.current = d.updatedAt;
   };
@@ -153,6 +161,9 @@ export default function App() {
       y: d.yearlyGoals || {},
       del: [...(d.deletedIds || [])].sort(),
       ch: [...(d.channels || [])].sort((a, b) => a.id.localeCompare(b.id)).map((c) => [c.id, c.name]),
+      p: Object.keys(d.payouts || {})
+        .sort()
+        .map((m) => [m, d.payouts![m]?.rate, d.payouts![m]?.date]),
     });
 
   const scheduleRetry = () => {
@@ -354,7 +365,8 @@ export default function App() {
     goals: { [monthKey: string]: number } = incomeGoals,
     yGoals: { [year: string]: number } = yearlyGoals,
     dels: string[] = deletedIdsRef.current,
-    chans: Channel[] = channels
+    chans: Channel[] = channels,
+    pays: Payouts = payouts
   ) => {
     const payload: UserData = {
       transactions: updatedTxs,
@@ -364,6 +376,7 @@ export default function App() {
       yearlyGoals: yGoals,
       deletedIds: dels,
       channels: chans,
+      payouts: pays,
       updatedAt: Date.now(),
     };
 
@@ -580,9 +593,50 @@ export default function App() {
     }
   };
 
-  // Convert helpers
-  const toUZS = (t: Transaction) => t.currency === 'USD' ? t.amount * exchangeRate : t.amount;
-  const toUSD = (t: Transaction) => t.currency === 'UZS' ? t.amount / exchangeRate : t.amount;
+  // Convert helpers — har bir yozuv O'Z ish oyining to'lov kursi bilan hisoblanadi.
+  // To'lov hali kelmagan oylar joriy kurs bilan taxminiy ko'rsatiladi.
+  const toUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate);
+  const toUSD = (t: Transaction) => txUSD(t, payouts, exchangeRate);
+
+  // To'lov kursi kutilayotgan o'tgan oylar soni (joriy oy hisobga olinmaydi —
+  // uning puli hali kelmaydi, shuning uchun bu doim tursa shovqin bo'lardi).
+  const pendingPayoutMonths = useMemo(() => {
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    const withUsd = new Set<string>(
+      transactions.filter((t) => t.currency === 'USD').map((t) => t.date.slice(0, 7))
+    );
+    return Array.from(withUsd).filter((m) => m < thisMonth && !isSettled(m, payouts)).length;
+  }, [transactions, payouts]);
+
+  /** Ish oyi uchun to'lov kursini saqlash/o'chirish. */
+  const handlePayoutChange = (monthKey: string, rate: number | null, date?: string) => {
+    const next: Payouts = { ...payouts };
+    if (rate === null) {
+      delete next[monthKey];
+    } else {
+      next[monthKey] = { rate, ...(date ? { date } : {}) };
+    }
+    setPayouts(next);
+    if (binId) {
+      performSync(
+        transactions,
+        charityPercentage,
+        exchangeRate,
+        binId,
+        incomeGoals,
+        yearlyGoals,
+        deletedIdsRef.current,
+        channels,
+        next
+      );
+    }
+    showToast(
+      rate === null
+        ? "To'lov kursi o'chirildi — oy yana taxminiy hisoblanadi."
+        : "To'lov kursi saqlandi. Bu oyning hisobi endi qotdi.",
+      rate === null ? 'info' : 'success'
+    );
+  };
 
   // Ko'rish qamrovi (viewScope) bo'yicha filtrlangan tranzaksiyalar
   // 'all' = hammasi, 'self' = faqat meniki, aks holda kanal id'si
@@ -599,10 +653,10 @@ export default function App() {
   }, [scopedTransactions, selectedPeriod]);
 
   // Totals — ehson FAQAT "meniki" (self) qismidan hisoblanadi
-  const totalUZS = useMemo(() => periodTransactions.reduce((sum, t) => sum + toUZS(t), 0), [periodTransactions, exchangeRate]);
-  const totalUSD = useMemo(() => periodTransactions.reduce((sum, t) => sum + toUSD(t), 0), [periodTransactions, exchangeRate]);
-  const selfUZS = useMemo(() => periodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUZS(t), 0), [periodTransactions, exchangeRate]);
-  const selfUSD = useMemo(() => periodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUSD(t), 0), [periodTransactions, exchangeRate]);
+  const totalUZS = useMemo(() => periodTransactions.reduce((sum, t) => sum + toUZS(t), 0), [periodTransactions, exchangeRate, payouts]);
+  const totalUSD = useMemo(() => periodTransactions.reduce((sum, t) => sum + toUSD(t), 0), [periodTransactions, exchangeRate, payouts]);
+  const selfUZS = useMemo(() => periodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUZS(t), 0), [periodTransactions, exchangeRate, payouts]);
+  const selfUSD = useMemo(() => periodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUSD(t), 0), [periodTransactions, exchangeRate, payouts]);
   const charityUZS = useMemo(() => (selfUZS * charityPercentage) / 100, [selfUZS, charityPercentage]);
   const charityUSD = useMemo(() => (selfUSD * charityPercentage) / 100, [selfUSD, charityPercentage]);
   // Sof = jami − ehson = (mening sofim) + (boshqa kanal puli)
@@ -626,8 +680,8 @@ export default function App() {
     return scopedTransactions.filter(t => t.date.startsWith(prevPeriod));
   }, [scopedTransactions, prevPeriod]);
 
-  const prevTotalUZS = useMemo(() => prevPeriodTransactions.reduce((sum, t) => sum + toUZS(t), 0), [prevPeriodTransactions, exchangeRate]);
-  const prevSelfUZS = useMemo(() => prevPeriodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUZS(t), 0), [prevPeriodTransactions, exchangeRate]);
+  const prevTotalUZS = useMemo(() => prevPeriodTransactions.reduce((sum, t) => sum + toUZS(t), 0), [prevPeriodTransactions, exchangeRate, payouts]);
+  const prevSelfUZS = useMemo(() => prevPeriodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUZS(t), 0), [prevPeriodTransactions, exchangeRate, payouts]);
   const prevCharityUZS = useMemo(() => (prevSelfUZS * charityPercentage) / 100, [prevSelfUZS, charityPercentage]);
   const prevNetUZS = useMemo(() => prevTotalUZS - prevCharityUZS, [prevTotalUZS, prevCharityUZS]);
 
@@ -707,11 +761,11 @@ export default function App() {
     });
 
     return statsList.sort((a, b) => a.monthKey.localeCompare(b.monthKey));
-  }, [scopedTransactions, charityPercentage, exchangeRate]);
+  }, [scopedTransactions, charityPercentage, exchangeRate, payouts]);
 
   // Export/Import backup
   const handleExportData = () => {
-    const exportData = { transactions, exchangeRate, charityPercentage, incomeGoals, yearlyGoals, channels };
+    const exportData = { transactions, exchangeRate, charityPercentage, incomeGoals, yearlyGoals, channels, payouts };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
@@ -743,7 +797,10 @@ export default function App() {
             if (Array.isArray(parsed.channels)) {
               setChannels(parsed.channels);
             }
-            if (binId && (parsed.incomeGoals || parsed.yearlyGoals || parsed.channels)) {
+            if (parsed.payouts && typeof parsed.payouts === 'object') {
+              setPayouts(parsed.payouts);
+            }
+            if (binId && (parsed.incomeGoals || parsed.yearlyGoals || parsed.channels || parsed.payouts)) {
               performSync(
                 parsed.transactions,
                 charityPercentage,
@@ -752,7 +809,8 @@ export default function App() {
                 parsed.incomeGoals || incomeGoals,
                 parsed.yearlyGoals || yearlyGoals,
                 deletedIdsRef.current,
-                Array.isArray(parsed.channels) ? parsed.channels : channels
+                Array.isArray(parsed.channels) ? parsed.channels : channels,
+                parsed.payouts && typeof parsed.payouts === 'object' ? parsed.payouts : payouts
               );
             }
             showToast("Ma'lumotlar fayldan tiklandi!", 'success');
@@ -961,6 +1019,21 @@ export default function App() {
               Kanallar
             </button>
 
+            {/* To'lovlar va kurs */}
+            <button
+              onClick={() => setIsPayoutsOpen(true)}
+              className="py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-all active:scale-[0.98] relative"
+              title="Oylik to'lov kurslarini kiritish"
+            >
+              <Banknote className="w-3.5 h-3.5 text-emerald-500" />
+              To'lovlar
+              {pendingPayoutMonths > 0 && (
+                <span className="ml-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-400 text-white text-[10px] font-black flex items-center justify-center">
+                  {pendingPayoutMonths}
+                </span>
+              )}
+            </button>
+
             {/* Start New Month Button */}
             <button
               onClick={handleStartNewMonth}
@@ -981,6 +1054,7 @@ export default function App() {
               transactions={transactions}
               charityPercentage={charityPercentage}
               exchangeRate={exchangeRate}
+              payouts={payouts}
               monthKey={goalMonthKey}
               incomeGoals={incomeGoals}
               yearlyGoals={yearlyGoals}
@@ -1170,6 +1244,7 @@ export default function App() {
               onCancelEdit={() => setEditingTransaction(null)}
               charityPercentage={charityPercentage}
               exchangeRate={exchangeRate}
+              payouts={payouts}
               channels={channels}
             />
           </div>
@@ -1189,6 +1264,7 @@ export default function App() {
             }}
             currentPercentage={charityPercentage}
             exchangeRate={exchangeRate}
+            payouts={payouts}
             channels={channels}
           />
         </div>
@@ -1200,6 +1276,7 @@ export default function App() {
         onClose={() => setIsStatsOpen(false)}
         transactions={scopedTransactions}
         exchangeRate={exchangeRate}
+        payouts={payouts}
       />
 
       <ExtremesModal
@@ -1207,6 +1284,7 @@ export default function App() {
         onClose={() => setIsExtremesOpen(false)}
         transactions={scopedTransactions}
         exchangeRate={exchangeRate}
+        payouts={payouts}
       />
 
       <ExportPDFModal
@@ -1214,6 +1292,7 @@ export default function App() {
         onClose={() => setIsExportOpen(false)}
         transactions={scopedTransactions}
         exchangeRate={exchangeRate}
+        payouts={payouts}
       />
 
       <MonthlyWrapModal
@@ -1222,6 +1301,7 @@ export default function App() {
         transactions={scopedTransactions}
         monthKey={wrapMonthKey}
         exchangeRate={exchangeRate}
+        payouts={payouts}
       />
 
       <ChannelsModal
@@ -1230,6 +1310,15 @@ export default function App() {
         channels={channels}
         transactions={transactions}
         onChange={handleChannelsChange}
+      />
+
+      <PayoutsModal
+        isOpen={isPayoutsOpen}
+        onClose={() => setIsPayoutsOpen(false)}
+        transactions={transactions}
+        exchangeRate={exchangeRate}
+        payouts={payouts}
+        onChange={handlePayoutChange}
       />
     </div>
   );

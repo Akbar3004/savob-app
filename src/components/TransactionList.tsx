@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Transaction, Channel, CATEGORIES, formatUZS, formatUSD, isSelfTx, SELF_CHANNEL_ID } from '../types';
+import { Transaction, Channel, Payouts, CATEGORIES, formatUZS, formatUSD, isSelfTx, SELF_CHANNEL_ID, txUZS, txUSD, isSettled } from '../types';
 import { Trash2, Edit2, Search, Filter, Calendar, DollarSign, Banknote, ArrowUpRight, ArrowDownRight, Youtube } from 'lucide-react';
 
 interface TransactionListProps {
@@ -9,6 +9,7 @@ interface TransactionListProps {
   currentPercentage: number;
   exchangeRate: number;
   channels: Channel[];
+  payouts: Payouts;
 }
 
 export const TransactionList: React.FC<TransactionListProps> = ({
@@ -18,6 +19,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   currentPercentage,
   exchangeRate,
   channels,
+  payouts,
 }) => {
   const channelFor = (t: Transaction) => {
     if (isSelfTx(t)) return null;
@@ -72,8 +74,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       .sort((a, b) => b.date.localeCompare(a.date) || idStamp(b.id) - idStamp(a.id));
   }, [transactions, searchTerm, selectedCategory, selectedMonth]);
 
-  const getAmountInUZS = (t: Transaction) => t.currency === 'USD' ? t.amount * exchangeRate : t.amount;
-  const getAmountInUSD = (t: Transaction) => t.currency === 'UZS' ? t.amount / exchangeRate : t.amount;
+  const getAmountInUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate);
+  const getAmountInUSD = (t: Transaction) => txUSD(t, payouts, exchangeRate);
 
   // Helper to get previous month string
   const getPrevMonthStr = (monthStr: string) => {
@@ -95,7 +97,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
     transactions.forEach((t) => {
       const key = `${channelKey(t)}|${t.date.slice(0, 7)}`;
-      const amtUZS = t.currency === 'USD' ? t.amount * exchangeRate : t.amount;
+      const amtUZS = txUZS(t, payouts, exchangeRate);
       sums[key] = (sums[key] || 0) + amtUZS;
       counts[key] = (counts[key] || 0) + 1;
     });
@@ -105,7 +107,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       avgs[k] = sums[k] / counts[k];
     });
     return avgs;
-  }, [transactions, exchangeRate]);
+  }, [transactions, exchangeRate, payouts]);
 
   return (
     <div className="card-glow p-6 flex flex-col h-full">
@@ -199,6 +201,9 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
                 // Taqqoslash: shu yozuv AYNAN O'Z kanalining o'tgan oydagi
                 // o'rtachasi bilan solishtiriladi (boshqa kanallar aralashmaydi).
+                // To'lov kelganmi — summa qat'iymi yoki hali taxminiymi?
+                const settled = isSettled(t.date.slice(0, 7), payouts);
+
                 const prevM = getPrevMonthStr(t.date.slice(0, 7));
                 const prevAvg = channelMonthAverages[`${channelKey(t)}|${prevM}`];
                 const scopeName = chan ? chan.name : 'meniki';
@@ -248,7 +253,17 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-right">
-                      <div className="font-bold text-xs text-slate-700 font-display">{formatUZS(amtUZS)}</div>
+                      <div
+                        className="font-bold text-xs text-slate-700 font-display"
+                        title={
+                          settled
+                            ? "To'lov kursi kiritilgan — bu summa qat'iy"
+                            : "To'lov hali kelmagan — joriy kurs bo'yicha taxminiy summa"
+                        }
+                      >
+                        {settled ? '' : '≈ '}
+                        {formatUZS(amtUZS)}
+                      </div>
                       <div className="text-[10px] font-semibold text-indigo-400">{formatUSD(amtUSD)}</div>
                       
                       {/* Row percentage comparison */}

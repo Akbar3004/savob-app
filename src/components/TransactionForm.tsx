@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Check, Edit2, X, DollarSign, Banknote, User, Youtube } from 'lucide-react';
-import { CATEGORIES, Transaction, Channel, SELF_CHANNEL_ID, formatUZS, formatUSD } from '../types';
+import { CATEGORIES, Transaction, Channel, Payouts, SELF_CHANNEL_ID, formatUZS, formatUSD, rateForMonth } from '../types';
 
 interface TransactionFormProps {
   onAdd: (transaction: Omit<Transaction, 'id' | 'charityPercentage'>) => void;
@@ -9,6 +9,7 @@ interface TransactionFormProps {
   onCancelEdit: () => void;
   charityPercentage: number;
   exchangeRate: number;
+  payouts: Payouts;
   channels: Channel[];
 }
 
@@ -19,6 +20,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   onCancelEdit,
   charityPercentage,
   exchangeRate,
+  payouts,
   channels,
 }) => {
   const [amount, setAmount] = useState<string>('');
@@ -136,8 +138,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   };
 
   const currentAmountNum = parseFloat(amount || '0');
-  const amountInUZS = currency === 'USD' ? currentAmountNum * exchangeRate : currentAmountNum;
-  const amountInUSD = currency === 'UZS' ? currentAmountNum / exchangeRate : currentAmountNum;
+  // Kiritilayotgan sana qaysi ish oyiga tushsa, o'sha oyning kursi ishlatiladi
+  // (to'lovi kelgan oy bo'lsa — qotgan kurs, aks holda joriy kurs).
+  const formRate = rateForMonth(date.slice(0, 7), payouts, exchangeRate);
+  const amountInUZS = currency === 'USD' ? currentAmountNum * formRate : currentAmountNum;
+  const amountInUSD = currency === 'UZS' ? currentAmountNum / formRate : currentAmountNum;
   // Ehson faqat "meniki" (self) kanaldan ushlanadi; boshqa kanallarda 0
   const effectivePct = isSelf ? charityPercentage : 0;
   const liveCharityUZS = (amountInUZS * effectivePct) / 100;
