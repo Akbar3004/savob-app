@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Calendar, Wallet, Heart, TrendingUp, BarChart3, Percent, Check, Download } from 'lucide-react';
-import { Transaction, Payouts, CATEGORIES, formatUZS, formatUSD, txUZS, txUSD, rateForMonth } from '../types';
+import { Transaction, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, txUZS, txUSD, rateForMonth } from '../types';
 import { jsPDF } from 'jspdf';
 
 interface StatsModalProps {
@@ -10,6 +10,7 @@ interface StatsModalProps {
   transactions: Transaction[];
   exchangeRate: number;
   payouts: Payouts;
+  factors: PayoutFactors;
 }
 
 type RangeType = 'today' | 'week' | 'month' | 'prev_month' | 'all' | 'custom';
@@ -20,13 +21,14 @@ export const StatsModal: React.FC<StatsModalProps> = ({
   transactions,
   exchangeRate,
   payouts,
+  factors,
 }) => {
   const [rangeType, setRangeType] = useState<RangeType>('month');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
-  const toUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate);
-  const toUSD = (t: Transaction) => txUSD(t, payouts, exchangeRate);
+  const toUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate, factors);
+  const toUSD = (t: Transaction) => txUSD(t, payouts, exchangeRate, factors);
 
   const dateFilteredTransactions = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];

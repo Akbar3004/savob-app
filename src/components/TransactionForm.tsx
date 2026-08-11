@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Check, Edit2, X, DollarSign, Banknote, User, Youtube } from 'lucide-react';
-import { CATEGORIES, Transaction, Channel, Payouts, SELF_CHANNEL_ID, formatUZS, formatUSD, rateForMonth } from '../types';
+import { CATEGORIES, Transaction, Channel, Payouts, PayoutFactors, SELF_CHANNEL_ID, formatUZS, formatUSD, rateForMonth } from '../types';
 
 interface TransactionFormProps {
   onAdd: (transaction: Omit<Transaction, 'id' | 'charityPercentage'>) => void;
@@ -10,6 +10,7 @@ interface TransactionFormProps {
   charityPercentage: number;
   exchangeRate: number;
   payouts: Payouts;
+  factors: PayoutFactors;
   channels: Channel[];
 }
 
@@ -21,6 +22,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   charityPercentage,
   exchangeRate,
   payouts,
+  factors,
   channels,
 }) => {
   const [amount, setAmount] = useState<string>('');

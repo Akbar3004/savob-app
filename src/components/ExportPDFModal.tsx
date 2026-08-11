@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, FileText, Calendar, CheckSquare, Square, Download } from 'lucide-react';
-import { Transaction, Payouts, CATEGORIES, formatUZS, formatUSD, MONTH_NAMES, txUZS, txUSD } from '../types';
+import { Transaction, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, MONTH_NAMES, txUZS, txUSD } from '../types';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -11,6 +11,7 @@ interface ExportPDFModalProps {
   transactions: Transaction[];
   exchangeRate: number;
   payouts: Payouts;
+  factors: PayoutFactors;
 }
 
 type RangeType = 'today' | 'week' | 'month' | 'prev_month' | 'multiple';
@@ -21,6 +22,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
   transactions,
   exchangeRate,
   payouts,
+  factors,
 }) => {
   const [rangeType, setRangeType] = useState<RangeType>('month');
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
@@ -114,8 +116,8 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
     let netUZS = 0;
 
     const tableRows = filteredTransactions.map((t, idx) => {
-      const u = txUZS(t, payouts, exchangeRate);
-      const d = txUSD(t, payouts, exchangeRate);
+      const u = txUZS(t, payouts, exchangeRate, factors);
+      const d = txUSD(t, payouts, exchangeRate, factors);
       const cU = (u * t.charityPercentage) / 100;
       const nU = u - cU;
 

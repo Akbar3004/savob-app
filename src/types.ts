@@ -43,7 +43,19 @@ export interface Payout {
   rate: number;
   /** To'lov kelgan sana (YYYY-MM-DD). Ixtiyoriy. */
   date?: string;
+  /**
+   * AdSense'ga ASLIDA kelgan summa (USD).
+   *
+   * YouTube Studio taxminiy raqam ko'rsatadi; AdSense'ga esa YouTube qayta
+   * hisoblab (yaroqsiz trafik va h.k. chiqarib tashlanib) boshqa summa keladi.
+   * Bu qiymat kiritilsa, o'sha oyning USD yozuvlari bir xil NISBATDA qayta
+   * hisoblanadi — ya'ni har bir kanal bir xil foizda kamayadi (yoki oshadi).
+   */
+  actualUSD?: number;
 }
+
+/** Ish oyi -> tuzatish koeffitsienti (1 = tuzatish yo'q). */
+export type PayoutFactors = { [monthKey: string]: number };
 
 /** Kalit — ish oyi ("YYYY-MM"), ya'ni daromad TOPILGAN oy. */
 export type Payouts = { [monthKey: string]: Payout };
@@ -72,15 +84,70 @@ export function rateForMonth(monthKey: string, payouts: Payouts | undefined, cur
   return validRate(r) ? r : currentRate;
 }
 
-/** Yozuvning so'mdagi qiymati — o'z oyining kursi bo'yicha. */
-export function txUZS(t: Transaction, payouts: Payouts | undefined, currentRate: number): number {
-  if (t.currency !== 'USD') return t.amount;
-  return t.amount * rateForMonth(monthOf(t), payouts, currentRate);
+/**
+ * Har bir ish oyi uchun AdSense tuzatish koeffitsientini hisoblaydi.
+ *
+ * koeffitsient = AdSense'ga kelgan haqiqiy summa / o'sha oydagi USD yozuvlar yig'indisi
+ *
+ * Bitta umumiy koeffitsient barcha yozuvlarga qo'llangani uchun HAR BIR KANAL
+ * bir xil FOIZDA kamayadi — kichik kanal katta kanalning kamomadini ko'tarmaydi
+ * va hech qachon manfiyga tushmaydi.
+ *
+ * DIQQAT: to'liq tranzaksiyalar ro'yxatidan hisoblanishi shart (filtrlangan
+ * ro'yxatdan emas), aks holda koeffitsient noto'g'ri chiqadi.
+ */
+export function payoutFactors(transactions: Transaction[], payouts?: Payouts): PayoutFactors {
+  if (!payouts) return {};
+
+  // Tuzatish faqat USD (AdSense) tushumlariga tegishli.
+  // So'mdagi yozuvlar (hadya va h.k.) AdSense pulidan kelmaydi — ular tegilmaydi.
+  const loggedUSD: { [m: string]: number } = {};
+  for (const t of transactions) {
+    if (t.currency !== 'USD') continue;
+    const m = monthOf(t);
+    loggedUSD[m] = (loggedUSD[m] || 0) + t.amount;
+  }
+
+  const out: PayoutFactors = {};
+  for (const m of Object.keys(payouts)) {
+    const actual = payouts[m]?.actualUSD;
+    const logged = loggedUSD[m] || 0;
+    if (typeof actual === 'number' && Number.isFinite(actual) && actual >= 0 && logged > 0) {
+      out[m] = actual / logged;
+    }
+  }
+  return out;
 }
 
-/** Yozuvning dollardagi qiymati — o'z oyining kursi bo'yicha. */
-export function txUSD(t: Transaction, payouts: Payouts | undefined, currentRate: number): number {
-  if (t.currency === 'USD') return t.amount;
+function factorFor(monthKey: string, factors?: PayoutFactors): number {
+  const f = factors?.[monthKey];
+  return typeof f === 'number' && Number.isFinite(f) && f >= 0 ? f : 1;
+}
+
+/** Oyga AdSense tuzatishi qo'llanganmi? */
+export function hasAdjustment(monthKey: string, factors?: PayoutFactors): boolean {
+  return factors?.[monthKey] !== undefined;
+}
+
+/** Yozuvning so'mdagi qiymati — o'z oyining kursi va AdSense tuzatishi bo'yicha. */
+export function txUZS(
+  t: Transaction,
+  payouts: Payouts | undefined,
+  currentRate: number,
+  factors?: PayoutFactors
+): number {
+  if (t.currency !== 'USD') return t.amount;
+  return t.amount * factorFor(monthOf(t), factors) * rateForMonth(monthOf(t), payouts, currentRate);
+}
+
+/** Yozuvning dollardagi qiymati — o'z oyining kursi va AdSense tuzatishi bo'yicha. */
+export function txUSD(
+  t: Transaction,
+  payouts: Payouts | undefined,
+  currentRate: number,
+  factors?: PayoutFactors
+): number {
+  if (t.currency === 'USD') return t.amount * factorFor(monthOf(t), factors);
   const rate = rateForMonth(monthOf(t), payouts, currentRate);
   return rate > 0 ? t.amount / rate : 0;
 }

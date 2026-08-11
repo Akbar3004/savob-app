@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Transaction, Channel, Payouts, CATEGORIES, formatUZS, formatUSD, isSelfTx, SELF_CHANNEL_ID, txUZS, txUSD, isSettled } from '../types';
+import { Transaction, Channel, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, isSelfTx, SELF_CHANNEL_ID, txUZS, txUSD, isSettled } from '../types';
 import { Trash2, Edit2, Search, Filter, Calendar, DollarSign, Banknote, ArrowUpRight, ArrowDownRight, Youtube } from 'lucide-react';
 
 interface TransactionListProps {
@@ -10,6 +10,7 @@ interface TransactionListProps {
   exchangeRate: number;
   channels: Channel[];
   payouts: Payouts;
+  factors: PayoutFactors;
 }
 
 export const TransactionList: React.FC<TransactionListProps> = ({
@@ -20,6 +21,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   exchangeRate,
   channels,
   payouts,
+  factors,
 }) => {
   const channelFor = (t: Transaction) => {
     if (isSelfTx(t)) return null;
@@ -74,8 +76,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       .sort((a, b) => b.date.localeCompare(a.date) || idStamp(b.id) - idStamp(a.id));
   }, [transactions, searchTerm, selectedCategory, selectedMonth]);
 
-  const getAmountInUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate);
-  const getAmountInUSD = (t: Transaction) => txUSD(t, payouts, exchangeRate);
+  const getAmountInUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate, factors);
+  const getAmountInUSD = (t: Transaction) => txUSD(t, payouts, exchangeRate, factors);
 
   // Helper to get previous month string
   const getPrevMonthStr = (monthStr: string) => {
@@ -97,7 +99,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
     transactions.forEach((t) => {
       const key = `${channelKey(t)}|${t.date.slice(0, 7)}`;
-      const amtUZS = txUZS(t, payouts, exchangeRate);
+      const amtUZS = txUZS(t, payouts, exchangeRate, factors);
       sums[key] = (sums[key] || 0) + amtUZS;
       counts[key] = (counts[key] || 0) + 1;
     });
@@ -202,7 +204,11 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 // Taqqoslash: shu yozuv AYNAN O'Z kanalining o'tgan oydagi
                 // o'rtachasi bilan solishtiriladi (boshqa kanallar aralashmaydi).
                 // To'lov kelganmi — summa qat'iymi yoki hali taxminiymi?
-                const settled = isSettled(t.date.slice(0, 7), payouts);
+                const txMonth = t.date.slice(0, 7);
+                const settled = isSettled(txMonth, payouts);
+                // AdSense bo'yicha tuzatish qo'llanganmi (Studio raqamidan farqi)?
+                const adjFactor = factors[txMonth];
+                const adjusted = adjFactor !== undefined && t.currency === 'USD';
 
                 const prevM = getPrevMonthStr(t.date.slice(0, 7));
                 const prevAvg = channelMonthAverages[`${channelKey(t)}|${prevM}`];
@@ -256,15 +262,24 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                       <div
                         className="font-bold text-xs text-slate-700 font-display"
                         title={
-                          settled
+                          (settled
                             ? "To'lov kursi kiritilgan — bu summa qat'iy"
-                            : "To'lov hali kelmagan — joriy kurs bo'yicha taxminiy summa"
+                            : "To'lov hali kelmagan — joriy kurs bo'yicha taxminiy summa") +
+                          (adjusted
+                            ? `\nAdSense tuzatishi: Studio ${t.amount} → ${(t.amount * adjFactor).toFixed(2)} USD (${adjFactor >= 1 ? '+' : ''}${((adjFactor - 1) * 100).toFixed(1)}%)`
+                            : '')
                         }
                       >
                         {settled ? '' : '≈ '}
                         {formatUZS(amtUZS)}
                       </div>
                       <div className="text-[10px] font-semibold text-indigo-400">{formatUSD(amtUSD)}</div>
+                      {adjusted && (
+                        <div className="text-[9px] font-bold text-sky-500 mt-0.5">
+                          AdSense: {adjFactor >= 1 ? '+' : ''}
+                          {((adjFactor - 1) * 100).toFixed(1)}%
+                        </div>
+                      )}
                       
                       {/* Row percentage comparison */}
                       {diffPct !== null && (
