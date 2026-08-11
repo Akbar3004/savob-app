@@ -17,8 +17,11 @@ import {
 import {
   Transaction,
   Channel,
+  Payout,
   Payouts,
   PayoutFactors,
+  payoutStage,
+  isValidRate,
   formatUZS,
   formatUSD,
   MONTH_NAMES,
@@ -37,8 +40,8 @@ interface PayoutsModalProps {
   exchangeRate: number;
   payouts: Payouts;
   factors: PayoutFactors;
-  /** rate = null bo'lsa, oyning to'lov ma'lumoti o'chiriladi (yana taxminiy bo'ladi). */
-  onChange: (monthKey: string, rate: number | null, date?: string, actualUSD?: number) => void;
+  /** payout = null bo'lsa, oyning to'lov ma'lumoti o'chiriladi (yana taxminiy bo'ladi). */
+  onChange: (monthKey: string, payout: Payout | null) => void;
 }
 
 const monthLabel = (m: string) => {
@@ -100,6 +103,7 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
           loggedUSD: loggedUSD[m] || 0,
           count: counts[m],
           settled: isSettled(m, payouts),
+          stage: payoutStage(m, payouts),
           rate: rateForMonth(m, payouts, exchangeRate),
           uzs,
           payoutDate: payouts[m]?.date,
@@ -109,8 +113,16 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
       });
   }, [transactions, payouts, exchangeRate, factors]);
 
-  const pending = useMemo(() => months.filter((m) => !m.settled && m.loggedUSD > 0), [months]);
-  const pendingUSD = pending.reduce((s, m) => s + m.loggedUSD, 0);
+  // AdSense summasi hali kiritilmagan oylar (Studio raqami bo'yicha kutilyapti)
+  const awaitingAdSense = useMemo(
+    () => months.filter((m) => m.stage === 'pending' && m.loggedUSD > 0),
+    [months]
+  );
+  const awaitingAdSenseUSD = awaitingAdSense.reduce((s, m) => s + m.loggedUSD, 0);
+
+  // AdSense'ga tushgan, lekin hali bankdan yechilmagan (kurs yo'q) oylar
+  const awaitingRate = useMemo(() => months.filter((m) => m.stage === 'received'), [months]);
+  const awaitingRateUSD = awaitingRate.reduce((s, m) => s + (m.actualUSD || 0), 0);
 
   /** Oyning kanallar kesimi — tuzatishdan oldingi va keyingi USD summalari. */
   const channelSplit = (monthKey: string, factor: number) => {
@@ -152,12 +164,18 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
     setFetchNote(null);
   };
 
+  // Kurs va AdSense summasi MUSTAQIL: birini kiritib, ikkinchisini keyin qo'shsa bo'ladi.
   const save = (monthKey: string) => {
-    const rate = num(rateDraft);
-    if (!Number.isFinite(rate) || rate <= 0) {
-      setFetchNote("Kurs 0 dan katta son bo'lishi kerak.");
-      return;
+    let rate: number | undefined;
+    if (rateDraft.trim() !== '') {
+      const r = num(rateDraft);
+      if (!isValidRate(r)) {
+        setFetchNote("Kurs 0 dan katta son bo'lishi kerak (yoki bo'sh qoldiring).");
+        return;
+      }
+      rate = r;
     }
+
     let actual: number | undefined;
     if (actualDraft.trim() !== '') {
       const a = num(actualDraft);
@@ -167,7 +185,17 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
       }
       actual = a;
     }
-    onChange(monthKey, rate, dateDraft || undefined, actual);
+
+    if (rate === undefined && actual === undefined) {
+      setFetchNote("Kamida bittasini kiriting: AdSense summasi yoki kurs.");
+      return;
+    }
+
+    onChange(monthKey, {
+      ...(rate !== undefined ? { rate } : {}),
+      ...(dateDraft ? { date: dateDraft } : {}),
+      ...(actual !== undefined ? { actualUSD: actual } : {}),
+    });
     cancelEdit();
   };
 
@@ -240,30 +268,52 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
           <div className="flex items-start gap-2.5 p-3.5 mb-5 rounded-2xl bg-sky-50 border border-sky-100">
             <Info className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
             <p className="text-[11px] leading-relaxed text-sky-900 font-medium">
-              Studio taxminiy raqam ko'rsatadi; AdSense'ga YouTube qayta hisoblab boshqa summa
-              yuboradi. To'lov kelgach <b>kursni</b> va <b>AdSense'ga kelgan summani</b> kiriting —
-              o'sha oy <b>qotib qoladi</b>, farq esa barcha kanallarga <b>bir xil foizda</b>{' '}
-              taqsimlanadi. Ehson va sof foyda avtomatik qayta hisoblanadi. Kunlik yozuvlaringizga
-              tegilmaydi.
+              Bir oylik daromad ikki bosqichda aniq bo'ladi:{' '}
+              <b>1) AdSense'ga pul tushadi</b> — summani kiriting, farq barcha kanallarga bir xil
+              foizda taqsimlanib, ehson va sof foyda qayta hisoblanadi.{' '}
+              <b>2) Bankdan yechasiz</b> — kursni kiriting, shunda oyning so'mdagi hisobi qotadi.
+              Ikkalasi mustaqil: birini hozir, ikkinchisini keyin kiritsangiz bo'ladi. Kunlik
+              yozuvlaringizga tegilmaydi.
             </p>
           </div>
 
-          {/* Kutilayotgan to'lovlar */}
-          {pendingUSD > 0 && (
-            <div className="flex items-center justify-between p-3.5 mb-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-100">
+          {/* AdSense'ga tushgan, bankdan yechilishi kutilayotgan pul */}
+          {awaitingRateUSD > 0 && (
+            <div className="flex items-center justify-between p-3.5 mb-3 rounded-2xl bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-100">
               <div className="flex items-center gap-2.5">
-                <Clock className="w-4 h-4 text-amber-500" />
+                <Check className="w-4 h-4 text-indigo-500" />
                 <div>
-                  <p className="text-xs font-bold text-slate-800">Kutilayotgan to'lovlar</p>
+                  <p className="text-xs font-bold text-slate-800">AdSense'da turibdi</p>
                   <p className="text-[10px] text-slate-400 font-semibold">
-                    {pending.length} ta oy · hali kiritilmagan
+                    {awaitingRate.length} ta oy · bankdan yechilmagan
                   </p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-sm font-black text-amber-600">{formatUSD(pendingUSD)}</p>
+                <p className="text-sm font-black text-indigo-600">{formatUSD(awaitingRateUSD)}</p>
+                <p className="text-[10px] font-semibold text-indigo-400">
+                  ≈ {formatUZS(awaitingRateUSD * exchangeRate)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* AdSense summasi hali ma'lum bo'lmagan oylar */}
+          {awaitingAdSenseUSD > 0 && (
+            <div className="flex items-center justify-between p-3.5 mb-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-100">
+              <div className="flex items-center gap-2.5">
+                <Clock className="w-4 h-4 text-amber-500" />
+                <div>
+                  <p className="text-xs font-bold text-slate-800">AdSense kutilmoqda</p>
+                  <p className="text-[10px] text-slate-400 font-semibold">
+                    {awaitingAdSense.length} ta oy · Studio bo'yicha
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-black text-amber-600">{formatUSD(awaitingAdSenseUSD)}</p>
                 <p className="text-[10px] font-semibold text-amber-400">
-                  ≈ {formatUZS(pendingUSD * exchangeRate)}
+                  ≈ {formatUZS(awaitingAdSenseUSD * exchangeRate)}
                 </p>
               </div>
             </div>
@@ -291,13 +341,22 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-bold text-slate-800">{monthLabel(m.key)}</p>
-                        {m.settled ? (
+                        {m.stage === 'settled' && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-wide">
-                            <Lock className="w-2.5 h-2.5" /> To'langan
+                            <Lock className="w-2.5 h-2.5" /> Yechildi
                           </span>
-                        ) : (
+                        )}
+                        {m.stage === 'received' && (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-100 text-indigo-700 text-[9px] font-black uppercase tracking-wide"
+                            title="AdSense'ga pul tushgan. Kurs bankdan yechganingizda kiritiladi."
+                          >
+                            <Check className="w-2.5 h-2.5" /> AdSense keldi
+                          </span>
+                        )}
+                        {m.stage === 'pending' && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-100 text-amber-700 text-[9px] font-black uppercase tracking-wide">
-                            <Clock className="w-2.5 h-2.5" /> Taxminiy
+                            <Clock className="w-2.5 h-2.5" /> Kutilmoqda
                           </span>
                         )}
                         {adjusted && (
@@ -322,8 +381,10 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
                           <>Studio {formatUSD(m.loggedUSD)}</>
                         )}
                         {' · '}
-                        {m.count} ta yozuv · kurs {Math.round(m.rate)}
-                        {m.payoutDate ? ` · ${m.payoutDate}` : ''}
+                        {m.count} ta yozuv
+                        {m.stage === 'settled'
+                          ? ` · kurs ${Math.round(m.rate)}${m.payoutDate ? ` · ${m.payoutDate}` : ''}`
+                          : ` · kurs kutilmoqda (≈${Math.round(m.rate)})`}
                       </p>
                     </div>
 
@@ -387,44 +448,65 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
                       animate={{ opacity: 1, height: 'auto' }}
                       className="mt-3 pt-3 border-t border-slate-200/70"
                     >
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <div className="flex-1">
-                          <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                            To'lov sanasi
+                      {/* 1-bosqich: AdSense'ga pul tushdi (oyning ~7-12 kunlari) */}
+                      <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-100">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <span className="w-4 h-4 rounded-full bg-indigo-500 text-white text-[9px] font-black flex items-center justify-center shrink-0">
+                            1
+                          </span>
+                          <label className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">
+                            AdSense'ga kelgan summa (USD)
                           </label>
-                          <input
-                            type="date"
-                            value={dateDraft}
-                            onChange={(e) => setDateDraft(e.target.value)}
-                            className="w-full px-3 py-2.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700"
-                          />
                         </div>
-                        <div className="flex-1">
-                          <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                            1 USD = ? so'm
-                          </label>
-                          <input
-                            inputMode="decimal"
-                            value={rateDraft}
-                            onChange={(e) => setRateDraft(sanitize(e.target.value))}
-                            placeholder="12340"
-                            className="w-full px-3 py-2.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700 placeholder-slate-300"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="mt-2">
-                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                          AdSense'ga kelgan summa (USD)
-                        </label>
                         <input
                           inputMode="decimal"
                           value={actualDraft}
                           onChange={(e) => setActualDraft(sanitize(e.target.value))}
                           onKeyDown={(e) => e.key === 'Enter' && save(m.key)}
-                          placeholder={`Studio bo'yicha ${m.loggedUSD.toFixed(2)} — bo'sh qoldirsangiz tuzatish qo'llanmaydi`}
+                          placeholder={`Studio bo'yicha ${m.loggedUSD.toFixed(2)}`}
                           className="w-full px-3 py-2.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700 placeholder-slate-300"
                         />
+                        <p className="text-[9px] text-indigo-400 font-semibold mt-1">
+                          Faqat shuni kiritsangiz ham bo'ladi — kurs keyin so'raladi.
+                        </p>
+                      </div>
+
+                      {/* 2-bosqich: bankdan yechildi (oyning ~26-28 kunlari) */}
+                      <div className="mt-2 p-3 rounded-xl bg-emerald-50/50 border border-emerald-100">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] font-black flex items-center justify-center shrink-0">
+                            2
+                          </span>
+                          <label className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">
+                            Bankdan yechilganda
+                          </label>
+                          <span className="text-[9px] font-bold text-slate-400 normal-case tracking-normal">
+                            (ixtiyoriy)
+                          </span>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <div className="flex-1">
+                            <input
+                              type="date"
+                              value={dateDraft}
+                              onChange={(e) => setDateDraft(e.target.value)}
+                              className="w-full px-3 py-2.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-700"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <input
+                              inputMode="decimal"
+                              value={rateDraft}
+                              onChange={(e) => setRateDraft(sanitize(e.target.value))}
+                              onKeyDown={(e) => e.key === 'Enter' && save(m.key)}
+                              placeholder="1 USD = ? so'm"
+                              className="w-full px-3 py-2.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-700 placeholder-slate-300"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-[9px] text-emerald-600/70 font-semibold mt-1">
+                          Kurs kiritilgach bu oyning so'mdagi hisobi qotadi.
+                        </p>
                       </div>
 
                       {/* Jonli oldindan ko'rish */}

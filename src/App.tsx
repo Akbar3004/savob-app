@@ -27,7 +27,7 @@ import {
   Youtube,
   Banknote,
 } from 'lucide-react';
-import { Transaction, MonthlyStats, Channel, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, SELF_CHANNEL_ID, isSelfTx, txUZS, txUSD, isSettled, payoutFactors } from './types';
+import { Transaction, MonthlyStats, Channel, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, SELF_CHANNEL_ID, isSelfTx, txUZS, txUSD, isSettled, payoutFactors, Payout, isEmptyPayout, isValidRate } from './types';
 import { MetricCard } from './components/MetricCard';
 import { TransactionForm } from './components/TransactionForm';
 import { MonthlyChart } from './components/MonthlyChart';
@@ -615,22 +615,18 @@ export default function App() {
     return Array.from(withUsd).filter((m) => m < thisMonth && !isSettled(m, payouts)).length;
   }, [transactions, payouts]);
 
-  /** Ish oyi uchun to'lov ma'lumotini saqlash/o'chirish. */
-  const handlePayoutChange = (
-    monthKey: string,
-    rate: number | null,
-    date?: string,
-    actualUSD?: number
-  ) => {
+  /**
+   * Ish oyi uchun to'lov ma'lumotini saqlash/o'chirish.
+   * `payout === null` yoki barcha maydonlar bo'sh bo'lsa — yozuv o'chiriladi.
+   * Kurs va AdSense summasi mustaqil: birini kiritib, ikkinchisini keyin qo'shsa bo'ladi.
+   */
+  const handlePayoutChange = (monthKey: string, payout: Payout | null) => {
     const next: Payouts = { ...payouts };
-    if (rate === null) {
+    const removing = payout === null || isEmptyPayout(payout);
+    if (removing) {
       delete next[monthKey];
     } else {
-      next[monthKey] = {
-        rate,
-        ...(date ? { date } : {}),
-        ...(typeof actualUSD === 'number' && actualUSD >= 0 ? { actualUSD } : {}),
-      };
+      next[monthKey] = payout!;
     }
     setPayouts(next);
     if (binId) {
@@ -646,12 +642,16 @@ export default function App() {
         next
       );
     }
-    showToast(
-      rate === null
-        ? "To'lov kursi o'chirildi — oy yana taxminiy hisoblanadi."
-        : "To'lov kursi saqlandi. Bu oyning hisobi endi qotdi.",
-      rate === null ? 'info' : 'success'
-    );
+    if (removing) {
+      showToast("To'lov ma'lumoti o'chirildi — oy yana taxminiy hisoblanadi.", 'info');
+    } else if (isValidRate(payout!.rate)) {
+      showToast("Saqlandi. Kurs kiritilgani uchun bu oyning hisobi qotdi.", 'success');
+    } else {
+      showToast(
+        "AdSense summasi saqlandi. Kursni bankdan yechganingizda kiritasiz.",
+        'success'
+      );
+    }
   };
 
   // Ko'rish qamrovi (viewScope) bo'yicha filtrlangan tranzaksiyalar

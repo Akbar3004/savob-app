@@ -33,15 +33,24 @@ export const CHANNEL_COLORS = [
 /**
  * Ish oyi uchun to'lov ma'lumoti.
  *
- * YouTube daromadi ishlangan oydan keyin to'lanadi (masalan, iyul daromadi
- * avgust oxirida keladi) va so'mga o'sha KUNDAGI kurs bilan aylantiriladi.
- * Shuning uchun kurs har bir ish oyiga biriktiriladi: to'lov kelgach kiritiladi
- * va o'sha oyning barcha hisob-kitoblari abadiy qotib qoladi.
+ * Bir oylik daromad IKKI bosqichda aniq bo'ladi va ular turli vaqtda sodir
+ * bo'ladi, shuning uchun har biri ALOHIDA kiritiladi:
+ *
+ *   1) AdSense'ga pul tushadi (taxminan keyingi oyning 7-12 kunlari)
+ *      -> `actualUSD` ma'lum bo'ladi, kurs esa hali yo'q
+ *   2) Bankdan pul yechiladi (taxminan 26-28 kunlari)
+ *      -> `rate` ma'lum bo'ladi va oy butunlay qotadi
+ *
+ * Shu sababli ikkala maydon ham ixtiyoriy: birini kiritib, ikkinchisini
+ * keyinroq qo'shish mumkin.
  */
 export interface Payout {
-  /** 1 USD necha so'm — to'lov kelgan kundagi kurs. */
-  rate: number;
-  /** To'lov kelgan sana (YYYY-MM-DD). Ixtiyoriy. */
+  /**
+   * 1 USD necha so'm — pul BANKDAN YECHILGAN kundagi kurs.
+   * Kiritilmagan bo'lsa, so'mdagi summalar joriy kurs bo'yicha taxminiy.
+   */
+  rate?: number;
+  /** Pul bankdan yechilgan sana (YYYY-MM-DD). Ixtiyoriy. */
   date?: string;
   /**
    * AdSense'ga ASLIDA kelgan summa (USD).
@@ -66,13 +75,34 @@ export function monthOf(t: Transaction): string {
 }
 
 /** Kurs haqiqiy sonmi? (buzuq ma'lumot hisobni buzmasligi uchun) */
-function validRate(r: unknown): r is number {
+export function isValidRate(r: unknown): r is number {
   return typeof r === 'number' && Number.isFinite(r) && r > 0;
 }
 
-/** Oy to'langanmi — ya'ni kursi qotganmi? */
+/** Bankdan yechilganmi — ya'ni kurs kiritilib, oy qotganmi? */
 export function isSettled(monthKey: string, payouts?: Payouts): boolean {
-  return validRate(payouts?.[monthKey]?.rate);
+  return isValidRate(payouts?.[monthKey]?.rate);
+}
+
+/** AdSense'ga kelgan haqiqiy summa kiritilganmi? */
+export function hasActual(monthKey: string, payouts?: Payouts): boolean {
+  const a = payouts?.[monthKey]?.actualUSD;
+  return typeof a === 'number' && Number.isFinite(a) && a >= 0;
+}
+
+/** Oyning bosqichi: hali hech narsa yo'q -> AdSense keldi -> bankdan yechildi. */
+export type PayoutStage = 'pending' | 'received' | 'settled';
+
+export function payoutStage(monthKey: string, payouts?: Payouts): PayoutStage {
+  if (isSettled(monthKey, payouts)) return 'settled';
+  if (hasActual(monthKey, payouts)) return 'received';
+  return 'pending';
+}
+
+/** To'lov yozuvi bo'shmi (saqlashga arzimaydimi)? */
+export function isEmptyPayout(p?: Payout): boolean {
+  if (!p) return true;
+  return !isValidRate(p.rate) && !(typeof p.actualUSD === 'number' && Number.isFinite(p.actualUSD));
 }
 
 /**
@@ -81,7 +111,7 @@ export function isSettled(monthKey: string, payouts?: Payouts): boolean {
  */
 export function rateForMonth(monthKey: string, payouts: Payouts | undefined, currentRate: number): number {
   const r = payouts?.[monthKey]?.rate;
-  return validRate(r) ? r : currentRate;
+  return isValidRate(r) ? r : currentRate;
 }
 
 /**
