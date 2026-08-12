@@ -38,6 +38,7 @@ import { ExtremesModal } from './components/ExtremesModal';
 import { ExportPDFModal } from './components/ExportPDFModal';
 import { MonthlyWrapModal } from './components/MonthlyWrapModal';
 import { IncomeGoalCard } from './components/IncomeGoalCard';
+import { IncomeForecastCard } from './components/IncomeForecastCard';
 import { ChannelsModal } from './components/ChannelsModal';
 import { ChannelBreakdownCard } from './components/ChannelBreakdownCard';
 import { PayoutsModal } from './components/PayoutsModal';
@@ -1095,6 +1096,7 @@ export default function App() {
           const goalMonthKey =
             selectedPeriod === 'all' ? new Date().toISOString().slice(0, 7) : selectedPeriod;
           return (
+            <>
             <IncomeGoalCard
               transactions={transactions}
               charityPercentage={charityPercentage}
@@ -1107,6 +1109,17 @@ export default function App() {
               onSetGoal={handleSetIncomeGoal}
               onSetYearlyGoal={handleSetYearlyGoal}
             />
+            <IncomeForecastCard
+              transactions={transactions}
+              charityPercentage={charityPercentage}
+              exchangeRate={exchangeRate}
+              payouts={payouts}
+              factors={factors}
+              monthKey={goalMonthKey}
+              currentGoal={incomeGoals[goalMonthKey] || 0}
+              onSetGoal={handleSetIncomeGoal}
+            />
+            </>
           );
         })()}
 
