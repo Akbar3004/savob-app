@@ -9,6 +9,9 @@ Kunlik daromadlarni kiritish, jamg'armani kuzatish, belgilangan foizda hayriya (
   qo'shish. "Ijtimoiy tarmoq" tanlanganda izoh avtomatik kanal nomi bo'ladi
 - 🏆 Kanallar kesimi kartasi: har bir kanal shu davrda qancha ishlagani,
   eng ko'p daromad keltirgani yuqorida, o'z rangi bilan
+- 🔮 Oy oxiri taxmini: sizning o'z tarixingizdagi oy "shakli" asosida bu oy
+  qancha topishingiz mumkinligini oraliq bilan ko'rsatadi va maqsad uchun uchta
+  daraja tavsiya qiladi (har biri yonida o'tgan oylarda necha marta bajarilgani)
 - ❤️ Hayriya foizini belgilash (2.5% zakotdan 50% gacha) va avtomatik hisoblash
 - 📊 Oylik ustunli grafik va batafsil statistika (kunlik, haftalik, oylik, maxsus davr)
 - 📄 PDF hisobot eksporti (jsPDF)
