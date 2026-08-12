@@ -20,9 +20,67 @@ export interface Channel {
 
 export const SELF_CHANNEL_ID = 'self';
 
+/**
+ * Shaxsiy kanal — ehson AYNAN shundan ushlanadi.
+ * Foydalanuvchi unga o'z kanalining nomini va rangini bera oladi.
+ */
+export interface SelfChannel {
+  name: string;
+  color?: string;
+}
+
+export const DEFAULT_SELF_NAME = 'Meniki';
+export const DEFAULT_SELF_COLOR = '#6366f1';
+
 /** Tranzaksiya sizning ("meniki") daromadingizmi? Faqat 'self' dan ehson ushlanadi. */
 export function isSelfTx(t: Transaction): boolean {
   return !t.channelId || t.channelId === SELF_CHANNEL_ID;
+}
+
+/** Kanal ko'rinishi (nom + rang) — self va boshqa kanallar uchun yagona manba. */
+export interface ChannelInfo {
+  id: string;
+  name: string;
+  color: string;
+  isSelf: boolean;
+}
+
+/**
+ * Kanal id'si bo'yicha ko'rsatiladigan nom va rangni qaytaradi.
+ * Kanal o'chirilgan bo'lsa ham ma'noli qiymat beradi (yozuvlar nomsiz qolmasin).
+ */
+export function channelInfo(
+  channelId: string | undefined,
+  channels: Channel[],
+  self?: SelfChannel
+): ChannelInfo {
+  if (!channelId || channelId === SELF_CHANNEL_ID) {
+    return {
+      id: SELF_CHANNEL_ID,
+      name: self?.name?.trim() || DEFAULT_SELF_NAME,
+      color: self?.color || DEFAULT_SELF_COLOR,
+      isSelf: true,
+    };
+  }
+  const c = channels.find((x) => x.id === channelId);
+  return {
+    id: channelId,
+    name: c?.name || 'Boshqa kanal',
+    color: c?.color || '#f43f5e',
+    isSelf: false,
+  };
+}
+
+/** Yozuv ro'yxat/statistikada qanday nom bilan ko'rinadi. */
+export function txDisplayName(
+  t: Transaction,
+  channels: Channel[],
+  self?: SelfChannel
+): string {
+  // Ijtimoiy tarmoq tushumi har doim kanal nomi bilan ko'rinadi —
+  // kanal keyin qayta nomlansa, eski yozuvlar ham yangi nomni ko'rsatadi.
+  if (t.category === 'social_media') return channelInfo(t.channelId, channels, self).name;
+  return t.description;
 }
 
 // Yangi kanallar uchun tavsiya etilgan ranglar

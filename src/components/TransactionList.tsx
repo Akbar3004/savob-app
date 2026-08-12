@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Transaction, Channel, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, isSelfTx, SELF_CHANNEL_ID, txUZS, txUSD, isSettled } from '../types';
-import { Trash2, Edit2, Search, Filter, Calendar, DollarSign, Banknote, ArrowUpRight, ArrowDownRight, Youtube } from 'lucide-react';
+import { Transaction, Channel, SelfChannel, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, isSelfTx, SELF_CHANNEL_ID, txUZS, txUSD, isSettled, channelInfo, txDisplayName } from '../types';
+import { Trash2, Edit2, Search, Filter, Calendar, DollarSign, Banknote, ArrowUpRight, ArrowDownRight, Youtube, User } from 'lucide-react';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -9,6 +9,7 @@ interface TransactionListProps {
   currentPercentage: number;
   exchangeRate: number;
   channels: Channel[];
+  selfChannel: SelfChannel | undefined;
   payouts: Payouts;
   factors: PayoutFactors;
 }
@@ -20,13 +21,12 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   currentPercentage,
   exchangeRate,
   channels,
+  selfChannel,
   payouts,
   factors,
 }) => {
-  const channelFor = (t: Transaction) => {
-    if (isSelfTx(t)) return null;
-    return channels.find((c) => c.id === t.channelId) || { id: t.channelId || '', name: 'Boshqa kanal', color: '#f43f5e' };
-  };
+  // Har bir yozuv uchun kanal ma'lumoti (shaxsiy kanal ham o'z nomi/rangi bilan)
+  const channelFor = (t: Transaction) => channelInfo(t.channelId, channels, selfChannel);
   const currentMonth = useMemo(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -63,18 +63,20 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   const filteredTransactions = useMemo(() => {
     return transactions
       .filter((t) => {
+        const q = searchTerm.toLowerCase();
         const matchesSearch =
-          t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          t.description.toLowerCase().includes(q) ||
+          channelInfo(t.channelId, channels, selfChannel).name.toLowerCase().includes(q) ||
           CATEGORIES.find((c) => c.id === t.category)
             ?.label.toLowerCase()
-            .includes(searchTerm.toLowerCase());
+            .includes(q);
         const matchesCategory = selectedCategory === 'all' || t.category === selectedCategory;
         const matchesMonth = selectedMonth === 'all' || t.date.startsWith(selectedMonth);
         return matchesSearch && matchesCategory && matchesMonth;
       })
       // Eng yangi sana yuqorida; bir xil sanada esa keyin kiritilgani yuqorida
       .sort((a, b) => b.date.localeCompare(a.date) || idStamp(b.id) - idStamp(a.id));
-  }, [transactions, searchTerm, selectedCategory, selectedMonth]);
+  }, [transactions, searchTerm, selectedCategory, selectedMonth, channels, selfChannel]);
 
   const getAmountInUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate, factors);
   const getAmountInUSD = (t: Transaction) => txUSD(t, payouts, exchangeRate, factors);
@@ -212,7 +214,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
                 const prevM = getPrevMonthStr(t.date.slice(0, 7));
                 const prevAvg = channelMonthAverages[`${channelKey(t)}|${prevM}`];
-                const scopeName = chan ? chan.name : 'meniki';
+                const scopeName = chan.name;
                 let diffPct: number | null = null;
                 if (prevAvg && prevAvg > 0) {
                   diffPct = ((amtUZS - prevAvg) / prevAvg) * 100;
@@ -221,19 +223,25 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 return (
                   <tr key={t.id} className="group hover:bg-indigo-50/30 transition-colors">
                     <td className="py-3.5 px-4">
-                      <div className="font-semibold text-xs text-slate-800">{t.description}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: chan.color }}
+                        />
+                        <span className="font-semibold text-xs text-slate-800 truncate">
+                          {txDisplayName(t, channels, selfChannel)}
+                        </span>
+                      </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-[10px] text-slate-400 font-mono">{t.date}</span>
-                        {chan && (
-                          <span
-                            style={{ backgroundColor: `${chan.color}18`, color: chan.color || '#f43f5e' }}
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold"
-                            title="Boshqa kanal — ehsonsiz"
-                          >
-                            <Youtube className="w-2.5 h-2.5" />
-                            {chan.name}
-                          </span>
-                        )}
+                        <span
+                          style={{ backgroundColor: `${chan.color}18`, color: chan.color }}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold"
+                          title={chan.isSelf ? 'Shaxsiy kanal — ehson ushlanadi' : 'Boshqa kanal — ehsonsiz'}
+                        >
+                          {chan.isSelf ? <User className="w-2.5 h-2.5" /> : <Youtube className="w-2.5 h-2.5" />}
+                          {chan.name}
+                        </span>
                       </div>
                     </td>
                     <td className="py-3.5 px-4">

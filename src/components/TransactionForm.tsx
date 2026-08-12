@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Check, Edit2, X, DollarSign, Banknote, User, Youtube } from 'lucide-react';
-import { CATEGORIES, Transaction, Channel, Payouts, PayoutFactors, SELF_CHANNEL_ID, formatUZS, formatUSD, rateForMonth } from '../types';
+import { CATEGORIES, Transaction, Channel, SelfChannel, Payouts, PayoutFactors, SELF_CHANNEL_ID, formatUZS, formatUSD, rateForMonth, channelInfo } from '../types';
 
 interface TransactionFormProps {
   onAdd: (transaction: Omit<Transaction, 'id' | 'charityPercentage'>) => void;
@@ -12,6 +12,7 @@ interface TransactionFormProps {
   payouts: Payouts;
   factors: PayoutFactors;
   channels: Channel[];
+  selfChannel: SelfChannel | undefined;
 }
 
 export const TransactionForm: React.FC<TransactionFormProps> = ({
@@ -24,6 +25,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   payouts,
   factors,
   channels,
+  selfChannel,
 }) => {
   const [amount, setAmount] = useState<string>('');
   const [currency, setCurrency] = useState<'UZS' | 'USD'>('UZS');
@@ -34,6 +36,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const [error, setError] = useState<string>('');
 
   const isSelf = channelId === SELF_CHANNEL_ID;
+  // Tanlangan kanalning nomi va rangi (self ham, boshqa kanal ham)
+  const activeChannel = channelInfo(channelId, channels, selfChannel);
+  // Ijtimoiy tarmoq tushumida izoh = kanal nomi, shuning uchun izoh maydoni yashiriladi
+  const isSocial = category === 'social_media';
 
   useEffect(() => {
     if (!editingTransaction) {
@@ -126,7 +132,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       currency,
       date,
       category,
-      description: description.trim() || CATEGORIES.find(c => c.id === category)?.label || 'Tushum',
+      // Ijtimoiy tarmoq tushumi har doim kanal nomi bilan saqlanadi —
+      // izohni har kuni qo'lda yozish shart emas.
+      description: isSocial
+        ? activeChannel.name
+        : description.trim() || CATEGORIES.find((c) => c.id === category)?.label || 'Tushum',
       channelId,
     };
 
@@ -358,19 +368,34 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         </div>
 
-        {/* Description */}
-        <div>
-          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-            Tavsif (Izoh)
-          </label>
-          <input
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Masalan: Frilans loyiha uchun to'lov..."
-            className="w-full text-xs px-3 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-slate-700 placeholder-slate-300"
-          />
-        </div>
+        {/* Izoh — Ijtimoiy tarmoqda kanal nomi avtomatik qo'yiladi, maydon yashiriladi */}
+        {isSocial ? (
+          <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-slate-50/80 border border-slate-200">
+            <span
+              className="w-2.5 h-2.5 rounded-full shrink-0"
+              style={{ backgroundColor: activeChannel.color }}
+            />
+            <div className="min-w-0">
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                Izoh avtomatik
+              </p>
+              <p className="text-xs font-bold text-slate-700 truncate">{activeChannel.name}</p>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Tavsif (Izoh)
+            </label>
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Masalan: Frilans loyiha uchun to'lov..."
+              className="w-full text-xs px-3 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-slate-700 placeholder-slate-300"
+            />
+          </div>
+        )}
 
         {error && (
           <p className="text-[11px] font-semibold text-red-500 bg-red-50 p-2.5 rounded-xl border border-red-100">

@@ -1,14 +1,24 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Youtube, Plus, Trash2, Check, Edit2, User } from 'lucide-react';
-import { Channel, Transaction, CHANNEL_COLORS, isSelfTx } from '../types';
+import {
+  Channel,
+  Transaction,
+  SelfChannel,
+  CHANNEL_COLORS,
+  isSelfTx,
+  channelInfo,
+  DEFAULT_SELF_COLOR,
+} from '../types';
 
 interface ChannelsModalProps {
   isOpen: boolean;
   onClose: () => void;
   channels: Channel[];
   transactions: Transaction[];
+  selfChannel: SelfChannel | undefined;
   onChange: (channels: Channel[]) => void;
+  onSelfChange: (self: SelfChannel) => void;
 }
 
 export const ChannelsModal: React.FC<ChannelsModalProps> = ({
@@ -16,11 +26,31 @@ export const ChannelsModal: React.FC<ChannelsModalProps> = ({
   onClose,
   channels,
   transactions,
+  selfChannel,
   onChange,
+  onSelfChange,
 }) => {
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [editingSelf, setEditingSelf] = useState(false);
+  const [selfName, setSelfName] = useState('');
+  const [selfColor, setSelfColor] = useState(DEFAULT_SELF_COLOR);
+
+  const self = channelInfo(undefined, channels, selfChannel);
+
+  const startEditSelf = () => {
+    setSelfName(selfChannel?.name || '');
+    setSelfColor(selfChannel?.color || DEFAULT_SELF_COLOR);
+    setEditingSelf(true);
+  };
+
+  const saveSelf = () => {
+    const name = selfName.trim();
+    if (!name) return;
+    onSelfChange({ name, color: selfColor });
+    setEditingSelf(false);
+  };
 
   if (!isOpen) return null;
 
@@ -85,22 +115,86 @@ export const ChannelsModal: React.FC<ChannelsModalProps> = ({
             </div>
           </div>
 
-          {/* Self channel (fixed) */}
-          <div className="flex items-center justify-between p-3.5 mb-3 rounded-2xl bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white">
-                <User className="w-4 h-4" />
+          {/* Shaxsiy kanal — nomi va rangi tahrirlanadi */}
+          <div className="p-3.5 mb-3 rounded-2xl bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100">
+            {editingSelf ? (
+              <div className="space-y-2.5">
+                <label className="block text-[9px] font-black text-indigo-500 uppercase tracking-widest">
+                  Shaxsiy kanalimning nomi
+                </label>
+                <input
+                  autoFocus
+                  value={selfName}
+                  onChange={(e) => setSelfName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && saveSelf()}
+                  placeholder="Masalan: NA BNG"
+                  className="w-full text-sm font-semibold px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700 placeholder-slate-300"
+                />
+                <div>
+                  <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mb-1.5">
+                    Rangi
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[DEFAULT_SELF_COLOR, ...CHANNEL_COLORS].map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setSelfColor(c)}
+                        style={{ backgroundColor: c }}
+                        className={`w-7 h-7 rounded-lg transition-all ${
+                          selfColor === c ? 'ring-2 ring-offset-2 ring-slate-400 scale-110' : ''
+                        }`}
+                        aria-label={c}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={saveSelf}
+                    disabled={!selfName.trim()}
+                    className="flex items-center gap-1.5 py-2 px-4 bg-indigo-600 text-white font-bold text-[11px] rounded-xl transition-all active:scale-95 disabled:opacity-40"
+                  >
+                    <Check className="w-3.5 h-3.5" /> Saqlash
+                  </button>
+                  <button
+                    onClick={() => setEditingSelf(false)}
+                    className="py-2 px-3 bg-white text-slate-500 font-bold text-[11px] rounded-xl transition-all active:scale-95"
+                  >
+                    Bekor
+                  </button>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-bold text-slate-800">Meniki (asosiy)</p>
-                <p className="text-[10px] text-slate-400 font-semibold">
-                  {selfCount} ta yozuv · ehson ushlanadi
-                </p>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0"
+                    style={{ backgroundColor: self.color }}
+                  >
+                    <User className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-800 truncate">{self.name}</p>
+                    <p className="text-[10px] text-slate-400 font-semibold">
+                      {selfCount} ta yozuv · ehson ushlanadi
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] font-black text-indigo-500 uppercase tracking-wider bg-white/70 px-2.5 py-1 rounded-lg">
+                    Asosiy
+                  </span>
+                  <button
+                    onClick={startEditSelf}
+                    className="p-2 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-white/70 transition-all"
+                    title="Nomi va rangini o'zgartirish"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-            </div>
-            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-wider bg-white/70 px-2.5 py-1 rounded-lg">
-              Asosiy
-            </span>
+            )}
           </div>
 
           {/* Other channels */}

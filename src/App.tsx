@@ -27,7 +27,7 @@ import {
   Youtube,
   Banknote,
 } from 'lucide-react';
-import { Transaction, MonthlyStats, Channel, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, SELF_CHANNEL_ID, isSelfTx, txUZS, txUSD, isSettled, payoutFactors, Payout, isEmptyPayout, isValidRate } from './types';
+import { Transaction, MonthlyStats, Channel, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, SELF_CHANNEL_ID, isSelfTx, txUZS, txUSD, isSettled, payoutFactors, Payout, isEmptyPayout, isValidRate, SelfChannel, channelInfo, DEFAULT_SELF_NAME } from './types';
 import { MetricCard } from './components/MetricCard';
 import { TransactionForm } from './components/TransactionForm';
 import { MonthlyChart } from './components/MonthlyChart';
@@ -39,6 +39,7 @@ import { ExportPDFModal } from './components/ExportPDFModal';
 import { MonthlyWrapModal } from './components/MonthlyWrapModal';
 import { IncomeGoalCard } from './components/IncomeGoalCard';
 import { ChannelsModal } from './components/ChannelsModal';
+import { ChannelBreakdownCard } from './components/ChannelBreakdownCard';
 import { PayoutsModal } from './components/PayoutsModal';
 import { saveUserData, fetchUserData, mergeUserData, hashPassword, UserData } from './services/db';
 
@@ -52,6 +53,7 @@ export default function App() {
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [payouts, setPayouts] = useState<Payouts>({});
+  const [selfChannel, setSelfChannel] = useState<SelfChannel | undefined>(undefined);
   const [isPayoutsOpen, setIsPayoutsOpen] = useState(false);
   const [viewScope, setViewScope] = useState<string>('all'); // 'all' | 'self' | <channelId>
   const [isChannelsOpen, setIsChannelsOpen] = useState(false);
@@ -100,6 +102,7 @@ export default function App() {
     updated: `savob_updated_${id}`,
     channels: `savob_channels_${id}`,
     payouts: `savob_payouts_${id}`,
+    selfChan: `savob_selfchan_${id}`,
   });
 
   const writeCache = (id: string, d: UserData) => {
@@ -113,6 +116,7 @@ export default function App() {
     localStorage.setItem(k.updated, String(d.updatedAt || 0));
     localStorage.setItem(k.channels, JSON.stringify(d.channels || []));
     localStorage.setItem(k.payouts, JSON.stringify(d.payouts || {}));
+    localStorage.setItem(k.selfChan, JSON.stringify(d.selfChannel || null));
   };
 
   const readCache = (id: string): UserData | null => {
@@ -130,6 +134,7 @@ export default function App() {
         updatedAt: parseInt(localStorage.getItem(k.updated) || '0', 10),
         channels: JSON.parse(localStorage.getItem(k.channels) || '[]'),
         payouts: JSON.parse(localStorage.getItem(k.payouts) || '{}'),
+        selfChannel: JSON.parse(localStorage.getItem(k.selfChan) || 'null') || undefined,
       };
     } catch {
       return null;
@@ -145,6 +150,7 @@ export default function App() {
     setDeletedIds(d.deletedIds || []);
     setChannels(d.channels || []);
     setPayouts(d.payouts || {});
+    setSelfChannel(d.selfChannel);
     deletedIdsRef.current = d.deletedIds || [];
     if (d.updatedAt) lastAppliedRef.current = d.updatedAt;
   };
@@ -164,6 +170,7 @@ export default function App() {
       p: Object.keys(d.payouts || {})
         .sort()
         .map((m) => [m, d.payouts![m]?.rate, d.payouts![m]?.date, d.payouts![m]?.actualUSD]),
+      sc: [d.selfChannel?.name || '', d.selfChannel?.color || ''],
     });
 
   const scheduleRetry = () => {
@@ -366,7 +373,8 @@ export default function App() {
     yGoals: { [year: string]: number } = yearlyGoals,
     dels: string[] = deletedIdsRef.current,
     chans: Channel[] = channels,
-    pays: Payouts = payouts
+    pays: Payouts = payouts,
+    self: SelfChannel | undefined = selfChannel
   ) => {
     const payload: UserData = {
       transactions: updatedTxs,
@@ -377,6 +385,7 @@ export default function App() {
       deletedIds: dels,
       channels: chans,
       payouts: pays,
+      selfChannel: self,
       updatedAt: Date.now(),
     };
 
@@ -501,6 +510,26 @@ export default function App() {
     if (binId) {
       performSync(transactions, charityPercentage, exchangeRate, binId, incomeGoals, yearlyGoals, deletedIdsRef.current, updated);
     }
+  };
+
+  /** Shaxsiy kanal nomi/rangini saqlash. */
+  const handleSelfChannelChange = (updated: SelfChannel) => {
+    setSelfChannel(updated);
+    if (binId) {
+      performSync(
+        transactions,
+        charityPercentage,
+        exchangeRate,
+        binId,
+        incomeGoals,
+        yearlyGoals,
+        deletedIdsRef.current,
+        channels,
+        payouts,
+        updated
+      );
+    }
+    showToast('Kanal nomi saqlandi.', 'success');
   };
 
   const handleOnlineRateFetch = async () => {
@@ -1139,6 +1168,18 @@ export default function App() {
           </MetricCard>
         </div>
 
+        {/* Kanallar kesimi — har bir kanal shu davrda qancha ishlagani */}
+        <ChannelBreakdownCard
+          transactions={periodTransactions}
+          channels={channels}
+          selfChannel={selfChannel}
+          charityPercentage={charityPercentage}
+          exchangeRate={exchangeRate}
+          payouts={payouts}
+          factors={factors}
+          period={selectedPeriod}
+        />
+
         {/* Settings Row: Exchange Rate + Charity Percentage */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* Exchange Rate */}
@@ -1264,6 +1305,7 @@ export default function App() {
               payouts={payouts}
               factors={factors}
               channels={channels}
+              selfChannel={selfChannel}
             />
           </div>
           <div className="lg:col-span-2">
@@ -1285,6 +1327,7 @@ export default function App() {
             payouts={payouts}
             factors={factors}
             channels={channels}
+            selfChannel={selfChannel}
           />
         </div>
       </main>
@@ -1332,7 +1375,9 @@ export default function App() {
         onClose={() => setIsChannelsOpen(false)}
         channels={channels}
         transactions={transactions}
+        selfChannel={selfChannel}
         onChange={handleChannelsChange}
+        onSelfChange={handleSelfChannelChange}
       />
 
       <PayoutsModal
