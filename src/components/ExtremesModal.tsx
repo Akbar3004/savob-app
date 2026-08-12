@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Gauge, ArrowUpCircle, ArrowDownCircle, Equal, CalendarDays, CalendarRange } from 'lucide-react';
-import { Transaction, Payouts, CATEGORIES, formatUZS, formatUSD, txUZS, txUSD } from '../types';
+import { Transaction, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, txUZS, txUSD } from '../types';
 
 interface ExtremesModalProps {
   isOpen: boolean;
@@ -9,6 +9,7 @@ interface ExtremesModalProps {
   transactions: Transaction[];
   exchangeRate: number;
   payouts: Payouts;
+  factors: PayoutFactors;
 }
 
 interface PeriodAnalysis {
@@ -25,9 +26,10 @@ export const ExtremesModal: React.FC<ExtremesModalProps> = ({
   transactions,
   exchangeRate,
   payouts,
+  factors,
 }) => {
-  const toUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate);
-  const toUSD = (t: Transaction) => txUSD(t, payouts, exchangeRate);
+  const toUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate, factors);
+  const toUSD = (t: Transaction) => txUSD(t, payouts, exchangeRate, factors);
 
   const analyze = (txs: Transaction[]): PeriodAnalysis | null => {
     if (txs.length === 0) return null;

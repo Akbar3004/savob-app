@@ -27,7 +27,7 @@ import {
   Youtube,
   Banknote,
 } from 'lucide-react';
-import { Transaction, MonthlyStats, Channel, Payouts, formatUZS, formatUSD, MONTH_NAMES, SELF_CHANNEL_ID, isSelfTx, txUZS, txUSD, isSettled } from './types';
+import { Transaction, MonthlyStats, Channel, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, SELF_CHANNEL_ID, isSelfTx, txUZS, txUSD, isSettled, payoutFactors, Payout, isEmptyPayout, isValidRate } from './types';
 import { MetricCard } from './components/MetricCard';
 import { TransactionForm } from './components/TransactionForm';
 import { MonthlyChart } from './components/MonthlyChart';
@@ -163,7 +163,7 @@ export default function App() {
       ch: [...(d.channels || [])].sort((a, b) => a.id.localeCompare(b.id)).map((c) => [c.id, c.name]),
       p: Object.keys(d.payouts || {})
         .sort()
-        .map((m) => [m, d.payouts![m]?.rate, d.payouts![m]?.date]),
+        .map((m) => [m, d.payouts![m]?.rate, d.payouts![m]?.date, d.payouts![m]?.actualUSD]),
     });
 
   const scheduleRetry = () => {
@@ -593,10 +593,17 @@ export default function App() {
     }
   };
 
+  // AdSense tuzatish koeffitsientlari — TO'LIQ ro'yxatdan bir marta hisoblanadi
+  // va pastga uzatiladi (filtrlangan ro'yxatdan hisoblansa noto'g'ri chiqardi).
+  const factors: PayoutFactors = useMemo(
+    () => payoutFactors(transactions, payouts),
+    [transactions, payouts]
+  );
+
   // Convert helpers — har bir yozuv O'Z ish oyining to'lov kursi bilan hisoblanadi.
   // To'lov hali kelmagan oylar joriy kurs bilan taxminiy ko'rsatiladi.
-  const toUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate);
-  const toUSD = (t: Transaction) => txUSD(t, payouts, exchangeRate);
+  const toUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate, factors);
+  const toUSD = (t: Transaction) => txUSD(t, payouts, exchangeRate, factors);
 
   // To'lov kursi kutilayotgan o'tgan oylar soni (joriy oy hisobga olinmaydi —
   // uning puli hali kelmaydi, shuning uchun bu doim tursa shovqin bo'lardi).
@@ -608,13 +615,18 @@ export default function App() {
     return Array.from(withUsd).filter((m) => m < thisMonth && !isSettled(m, payouts)).length;
   }, [transactions, payouts]);
 
-  /** Ish oyi uchun to'lov kursini saqlash/o'chirish. */
-  const handlePayoutChange = (monthKey: string, rate: number | null, date?: string) => {
+  /**
+   * Ish oyi uchun to'lov ma'lumotini saqlash/o'chirish.
+   * `payout === null` yoki barcha maydonlar bo'sh bo'lsa — yozuv o'chiriladi.
+   * Kurs va AdSense summasi mustaqil: birini kiritib, ikkinchisini keyin qo'shsa bo'ladi.
+   */
+  const handlePayoutChange = (monthKey: string, payout: Payout | null) => {
     const next: Payouts = { ...payouts };
-    if (rate === null) {
+    const removing = payout === null || isEmptyPayout(payout);
+    if (removing) {
       delete next[monthKey];
     } else {
-      next[monthKey] = { rate, ...(date ? { date } : {}) };
+      next[monthKey] = payout!;
     }
     setPayouts(next);
     if (binId) {
@@ -630,12 +642,16 @@ export default function App() {
         next
       );
     }
-    showToast(
-      rate === null
-        ? "To'lov kursi o'chirildi — oy yana taxminiy hisoblanadi."
-        : "To'lov kursi saqlandi. Bu oyning hisobi endi qotdi.",
-      rate === null ? 'info' : 'success'
-    );
+    if (removing) {
+      showToast("To'lov ma'lumoti o'chirildi — oy yana taxminiy hisoblanadi.", 'info');
+    } else if (isValidRate(payout!.rate)) {
+      showToast("Saqlandi. Kurs kiritilgani uchun bu oyning hisobi qotdi.", 'success');
+    } else {
+      showToast(
+        "AdSense summasi saqlandi. Kursni bankdan yechganingizda kiritasiz.",
+        'success'
+      );
+    }
   };
 
   // Ko'rish qamrovi (viewScope) bo'yicha filtrlangan tranzaksiyalar
@@ -653,10 +669,10 @@ export default function App() {
   }, [scopedTransactions, selectedPeriod]);
 
   // Totals — ehson FAQAT "meniki" (self) qismidan hisoblanadi
-  const totalUZS = useMemo(() => periodTransactions.reduce((sum, t) => sum + toUZS(t), 0), [periodTransactions, exchangeRate, payouts]);
-  const totalUSD = useMemo(() => periodTransactions.reduce((sum, t) => sum + toUSD(t), 0), [periodTransactions, exchangeRate, payouts]);
-  const selfUZS = useMemo(() => periodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUZS(t), 0), [periodTransactions, exchangeRate, payouts]);
-  const selfUSD = useMemo(() => periodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUSD(t), 0), [periodTransactions, exchangeRate, payouts]);
+  const totalUZS = useMemo(() => periodTransactions.reduce((sum, t) => sum + toUZS(t), 0), [periodTransactions, exchangeRate, payouts, factors]);
+  const totalUSD = useMemo(() => periodTransactions.reduce((sum, t) => sum + toUSD(t), 0), [periodTransactions, exchangeRate, payouts, factors]);
+  const selfUZS = useMemo(() => periodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUZS(t), 0), [periodTransactions, exchangeRate, payouts, factors]);
+  const selfUSD = useMemo(() => periodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUSD(t), 0), [periodTransactions, exchangeRate, payouts, factors]);
   const charityUZS = useMemo(() => (selfUZS * charityPercentage) / 100, [selfUZS, charityPercentage]);
   const charityUSD = useMemo(() => (selfUSD * charityPercentage) / 100, [selfUSD, charityPercentage]);
   // Sof = jami − ehson = (mening sofim) + (boshqa kanal puli)
@@ -680,8 +696,8 @@ export default function App() {
     return scopedTransactions.filter(t => t.date.startsWith(prevPeriod));
   }, [scopedTransactions, prevPeriod]);
 
-  const prevTotalUZS = useMemo(() => prevPeriodTransactions.reduce((sum, t) => sum + toUZS(t), 0), [prevPeriodTransactions, exchangeRate, payouts]);
-  const prevSelfUZS = useMemo(() => prevPeriodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUZS(t), 0), [prevPeriodTransactions, exchangeRate, payouts]);
+  const prevTotalUZS = useMemo(() => prevPeriodTransactions.reduce((sum, t) => sum + toUZS(t), 0), [prevPeriodTransactions, exchangeRate, payouts, factors]);
+  const prevSelfUZS = useMemo(() => prevPeriodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUZS(t), 0), [prevPeriodTransactions, exchangeRate, payouts, factors]);
   const prevCharityUZS = useMemo(() => (prevSelfUZS * charityPercentage) / 100, [prevSelfUZS, charityPercentage]);
   const prevNetUZS = useMemo(() => prevTotalUZS - prevCharityUZS, [prevTotalUZS, prevCharityUZS]);
 
@@ -761,7 +777,7 @@ export default function App() {
     });
 
     return statsList.sort((a, b) => a.monthKey.localeCompare(b.monthKey));
-  }, [scopedTransactions, charityPercentage, exchangeRate, payouts]);
+  }, [scopedTransactions, charityPercentage, exchangeRate, payouts, factors]);
 
   // Export/Import backup
   const handleExportData = () => {
@@ -1055,6 +1071,7 @@ export default function App() {
               charityPercentage={charityPercentage}
               exchangeRate={exchangeRate}
               payouts={payouts}
+              factors={factors}
               monthKey={goalMonthKey}
               incomeGoals={incomeGoals}
               yearlyGoals={yearlyGoals}
@@ -1245,6 +1262,7 @@ export default function App() {
               charityPercentage={charityPercentage}
               exchangeRate={exchangeRate}
               payouts={payouts}
+              factors={factors}
               channels={channels}
             />
           </div>
@@ -1265,6 +1283,7 @@ export default function App() {
             currentPercentage={charityPercentage}
             exchangeRate={exchangeRate}
             payouts={payouts}
+            factors={factors}
             channels={channels}
           />
         </div>
@@ -1277,6 +1296,7 @@ export default function App() {
         transactions={scopedTransactions}
         exchangeRate={exchangeRate}
         payouts={payouts}
+        factors={factors}
       />
 
       <ExtremesModal
@@ -1285,6 +1305,7 @@ export default function App() {
         transactions={scopedTransactions}
         exchangeRate={exchangeRate}
         payouts={payouts}
+        factors={factors}
       />
 
       <ExportPDFModal
@@ -1293,6 +1314,7 @@ export default function App() {
         transactions={scopedTransactions}
         exchangeRate={exchangeRate}
         payouts={payouts}
+        factors={factors}
       />
 
       <MonthlyWrapModal
@@ -1302,6 +1324,7 @@ export default function App() {
         monthKey={wrapMonthKey}
         exchangeRate={exchangeRate}
         payouts={payouts}
+        factors={factors}
       />
 
       <ChannelsModal
@@ -1316,8 +1339,10 @@ export default function App() {
         isOpen={isPayoutsOpen}
         onClose={() => setIsPayoutsOpen(false)}
         transactions={transactions}
+        channels={channels}
         exchangeRate={exchangeRate}
         payouts={payouts}
+        factors={factors}
         onChange={handlePayoutChange}
       />
     </div>

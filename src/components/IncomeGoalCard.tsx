@@ -12,13 +12,14 @@ import {
   CalendarDays,
   Flame,
 } from 'lucide-react';
-import { Transaction, Payouts, formatUZS, formatUSD, MONTH_NAMES, isSelfTx, txUZS, rateForMonth } from '../types';
+import { Transaction, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, isSelfTx, txUZS, rateForMonth } from '../types';
 
 interface IncomeGoalCardProps {
   transactions: Transaction[];
   charityPercentage: number;
   exchangeRate: number;
   payouts: Payouts;
+  factors: PayoutFactors;
   monthKey: string; // "YYYY-MM" — maqsad qo'yiladigan oy
   incomeGoals: { [monthKey: string]: number }; // barcha oylik maqsadlar (streak uchun)
   yearlyGoals: { [year: string]: number }; // yillik maqsadlar
@@ -48,6 +49,7 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
   charityPercentage,
   exchangeRate,
   payouts,
+  factors,
   monthKey,
   incomeGoals,
   yearlyGoals,
@@ -71,7 +73,7 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
     setYearDraft('');
   }, [monthKey, goal, yearlyGoal]);
 
-  const toUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate);
+  const toUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate, factors);
   // Shu oyning so'm/dollar nisbati — to'lov kelgan bo'lsa qotgan kurs bo'yicha
   const monthRate = rateForMonth(monthKey, payouts, exchangeRate);
 

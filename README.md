@@ -15,6 +15,13 @@ Kunlik daromadlarni kiritish, jamg'armani kuzatish, belgilangan foizda hayriya (
 - 🧾 Oylik to'lov kursi: daromad ishlangan oydan keyin to'langani uchun har bir
   ish oyi o'z to'lov kursi bilan hisoblanadi. Kurs kiritilgach o'sha oyning
   hisoblari qotib qoladi; kiritilmagan oylar "taxminiy" deb belgilanadi
+- 🎯 AdSense tuzatishi: YouTube Studio taxminiy raqam ko'rsatadi, AdSense'ga esa
+  qayta hisoblangan boshqa summa keladi. Haqiqiy summani kiritsangiz, farq barcha
+  kanallarga bir xil foizda taqsimlanadi va ehson/sof foyda qayta hisoblanadi
+  (kunlik yozuvlarga tegilmaydi)
+- ⏳ To'lov ikki bosqichda kiritiladi, chunki ular turli vaqtda ma'lum bo'ladi:
+  avval AdSense'ga tushgan summa, keyinroq bankdan yechilgandagi kurs. Har biri
+  mustaqil — birini kiritib, ikkinchisini keyin qo'shsa bo'ladi
 
 ## Texnologiyalar
 

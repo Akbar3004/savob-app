@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Download, TrendingUp, Heart, Wallet, CalendarDays, Layers, Sparkles } from 'lucide-react';
-import { Transaction, Payouts, CATEGORIES, formatUSD, MONTH_NAMES, txUZS, rateForMonth, isSettled } from '../types';
+import { Transaction, Payouts, PayoutFactors, CATEGORIES, formatUSD, MONTH_NAMES, txUZS, rateForMonth, isSettled } from '../types';
 import { jsPDF } from 'jspdf';
 
 interface MonthlyWrapModalProps {
@@ -11,6 +11,7 @@ interface MonthlyWrapModalProps {
   monthKey: string; // YYYY-MM
   exchangeRate: number;
   payouts: Payouts;
+  factors: PayoutFactors;
 }
 
 /** Raqamni ming ajratgichlari bilan formatlaydi ("15 174 120"). */
@@ -75,6 +76,7 @@ export const MonthlyWrapModal: React.FC<MonthlyWrapModalProps> = ({
   monthKey,
   exchangeRate,
   payouts,
+  factors,
 }) => {
   const monthName = React.useMemo(() => {
     const [year, month] = monthKey.split('-');
@@ -88,7 +90,7 @@ export const MonthlyWrapModal: React.FC<MonthlyWrapModalProps> = ({
   }, [monthKey]);
 
   const stats = React.useMemo(() => {
-    const toUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate);
+    const toUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate, factors);
     // Bu oyning so'm/dollar nisbati — to'lov kelgan bo'lsa qotgan kurs bo'yicha
     const monthRate = rateForMonth(monthKey, payouts, exchangeRate);
 
