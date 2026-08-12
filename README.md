@@ -5,6 +5,10 @@ Kunlik daromadlarni kiritish, jamg'armani kuzatish, belgilangan foizda hayriya (
 ## Imkoniyatlar
 
 - 💰 UZS va USD valyutalarida tushumlarni kiritish
+- 📺 Kanallar: shaxsiy kanalga o'z nomi va rangini berish, boshqa kanallarni
+  qo'shish. "Ijtimoiy tarmoq" tanlanganda izoh avtomatik kanal nomi bo'ladi
+- 🏆 Kanallar kesimi kartasi: har bir kanal shu davrda qancha ishlagani,
+  eng ko'p daromad keltirgani yuqorida, o'z rangi bilan
 - ❤️ Hayriya foizini belgilash (2.5% zakotdan 50% gacha) va avtomatik hisoblash
 - 📊 Oylik ustunli grafik va batafsil statistika (kunlik, haftalik, oylik, maxsus davr)
 - 📄 PDF hisobot eksporti (jsPDF)

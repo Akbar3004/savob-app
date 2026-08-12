@@ -1,4 +1,4 @@
-import { Transaction, Channel, Payouts } from '../types';
+import { Transaction, Channel, Payouts, SelfChannel } from '../types';
 
 // Har bir foydalanuvchi ma'lumoti parol xeshi bo'yicha saqlanadi.
 // binId === parol xeshi (SHA-256, hex). Alohida registry kerak emas.
@@ -14,6 +14,8 @@ export interface UserData {
   yearlyGoals?: { [year: string]: number };
   // Boshqa (o'zimniki bo'lmagan) kanallar ro'yxati.
   channels?: Channel[];
+  // Shaxsiy kanal nomi va rangi (ehson shundan ushlanadi).
+  selfChannel?: SelfChannel;
   // Ish oyi bo'yicha to'lov kurslari. Kalit: "YYYY-MM" (daromad topilgan oy).
   payouts?: Payouts;
   // O'chirilgan tranzaksiya id'lari (tombstone) — birlashtirishda qayta tirilmasligi uchun.
@@ -50,6 +52,8 @@ function normalize(data: any): UserData {
     yearlyGoals:
       data?.yearlyGoals && typeof data.yearlyGoals === 'object' ? data.yearlyGoals : {},
     channels: Array.isArray(data?.channels) ? data.channels : [],
+    selfChannel:
+      data?.selfChannel && typeof data.selfChannel === 'object' ? data.selfChannel : undefined,
     payouts: data?.payouts && typeof data.payouts === 'object' ? data.payouts : {},
     deletedIds: Array.isArray(data?.deletedIds) ? data.deletedIds : [],
     updatedAt: typeof data?.updatedAt === 'number' ? data.updatedAt : 0,
@@ -87,6 +91,7 @@ export function mergeUserData(a: UserData, b: UserData): UserData {
     incomeGoals: { ...(older.incomeGoals || {}), ...(newer.incomeGoals || {}) },
     yearlyGoals: { ...(older.yearlyGoals || {}), ...(newer.yearlyGoals || {}) },
     channels: Array.from(chanById.values()),
+    selfChannel: newer.selfChannel || older.selfChannel,
     payouts: { ...(older.payouts || {}), ...(newer.payouts || {}) },
     deletedIds,
     updatedAt: Math.max(aTime, bTime),
