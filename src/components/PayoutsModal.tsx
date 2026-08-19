@@ -17,6 +17,7 @@ import {
 import {
   Transaction,
   Channel,
+  SelfChannel,
   Payout,
   Payouts,
   PayoutFactors,
@@ -30,6 +31,8 @@ import {
   isSettled,
   isSelfTx,
   SELF_CHANNEL_ID,
+  channelKeyOf,
+  channelInfo,
 } from '../types';
 
 interface PayoutsModalProps {
@@ -37,6 +40,7 @@ interface PayoutsModalProps {
   onClose: () => void;
   transactions: Transaction[];
   channels: Channel[];
+  selfChannel: SelfChannel | undefined;
   exchangeRate: number;
   payouts: Payouts;
   factors: PayoutFactors;
@@ -60,6 +64,7 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
   onClose,
   transactions,
   channels,
+  selfChannel,
   exchangeRate,
   payouts,
   factors,
@@ -68,7 +73,7 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
   const [editingMonth, setEditingMonth] = useState<string | null>(null);
   const [rateDraft, setRateDraft] = useState('');
   const [dateDraft, setDateDraft] = useState('');
-  const [actualDraft, setActualDraft] = useState('');
+  const [actualDrafts, setActualDrafts] = useState<{ [ch: string]: string }>({});
   const [fetching, setFetching] = useState(false);
   const [fetchNote, setFetchNote] = useState<string | null>(null);
 
@@ -81,15 +86,18 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
     return channels.find((c) => c.id === id)?.color || '#f43f5e';
   };
 
-  // Daromad kiritilgan oylar (yangisidan eskisiga)
+  // Daromad kiritilgan oylar (yangisidan eskisiga), har biri kanal kesimi bilan
   const months = useMemo(() => {
-    const loggedUSD: { [m: string]: number } = {};
+    const loggedByCh: { [m: string]: { [ch: string]: number } } = {};
     const counts: { [m: string]: number } = {};
     transactions.forEach((t) => {
       const m = t.date.slice(0, 7);
       counts[m] = (counts[m] || 0) + 1;
       // Faqat USD tushumlar AdSense'dan keladi
-      if (t.currency === 'USD') loggedUSD[m] = (loggedUSD[m] || 0) + t.amount;
+      if (t.currency !== 'USD') return;
+      const ch = channelKeyOf(t);
+      if (!loggedByCh[m]) loggedByCh[m] = {};
+      loggedByCh[m][ch] = (loggedByCh[m][ch] || 0) + t.amount;
     });
 
     return Object.keys(counts)
@@ -98,20 +106,47 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
         const uzs = transactions
           .filter((t) => t.date.startsWith(m))
           .reduce((s, t) => s + txUZS(t, payouts, exchangeRate, factors), 0);
+        const byCh = loggedByCh[m] || {};
+        const actualByCh = payouts[m]?.actualByChannel || {};
+
+        // Har bir kanal: Studio summasi va (bo'lsa) haqiqiy summasi
+        const chans = Object.keys(byCh)
+          .map((id) => {
+            const info = channelInfo(id === SELF_CHANNEL_ID ? undefined : id, channels, selfChannel);
+            const actual = actualByCh[id];
+            return {
+              id,
+              name: info.name,
+              color: info.color,
+              isSelf: info.isSelf,
+              logged: byCh[id],
+              actual: typeof actual === 'number' && Number.isFinite(actual) ? actual : undefined,
+              factor: factors[m]?.[id],
+            };
+          })
+          .sort((a, b) => b.logged - a.logged);
+
+        const loggedUSD = Object.values(byCh).reduce((s, v) => s + v, 0);
+        const actualUSD = chans.reduce(
+          (s, c) => s + (c.actual !== undefined ? c.actual : c.factor !== undefined ? c.logged * c.factor : 0),
+          0
+        );
+
         return {
           key: m,
-          loggedUSD: loggedUSD[m] || 0,
+          loggedUSD,
+          actualUSD,
+          chans,
           count: counts[m],
           settled: isSettled(m, payouts),
           stage: payoutStage(m, payouts),
           rate: rateForMonth(m, payouts, exchangeRate),
           uzs,
           payoutDate: payouts[m]?.date,
-          actualUSD: payouts[m]?.actualUSD,
-          factor: factors[m],
+          adjusted: !!factors[m] && Object.keys(factors[m]).length > 0,
         };
       });
-  }, [transactions, payouts, exchangeRate, factors]);
+  }, [transactions, payouts, exchangeRate, factors, channels, selfChannel]);
 
   // AdSense summasi hali kiritilmagan oylar (Studio raqami bo'yicha kutilyapti)
   const awaitingAdSense = useMemo(
@@ -124,35 +159,23 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
   const awaitingRate = useMemo(() => months.filter((m) => m.stage === 'received'), [months]);
   const awaitingRateUSD = awaitingRate.reduce((s, m) => s + (m.actualUSD || 0), 0);
 
-  /** Oyning kanallar kesimi — tuzatishdan oldingi va keyingi USD summalari. */
-  const channelSplit = (monthKey: string, factor: number) => {
-    const byChannel: { [id: string]: number } = {};
-    transactions
-      .filter((t) => t.date.startsWith(monthKey) && t.currency === 'USD')
-      .forEach((t) => {
-        const id = isSelfTx(t) ? SELF_CHANNEL_ID : t.channelId!;
-        byChannel[id] = (byChannel[id] || 0) + t.amount;
-      });
-    return Object.keys(byChannel)
-      .map((id) => ({
-        id,
-        name: channelName(id),
-        color: channelColor(id),
-        before: byChannel[id],
-        after: byChannel[id] * factor,
-      }))
-      .sort((a, b) => b.before - a.before);
-  };
-
   if (!isOpen) return null;
 
   const startEdit = (monthKey: string) => {
+    const row = months.find((m) => m.key === monthKey);
     setEditingMonth(monthKey);
     setRateDraft(payouts[monthKey]?.rate ? String(payouts[monthKey].rate) : '');
     setDateDraft(payouts[monthKey]?.date || '');
-    setActualDraft(
-      typeof payouts[monthKey]?.actualUSD === 'number' ? String(payouts[monthKey].actualUSD) : ''
-    );
+    // Kanal maydonlarini to'ldiramiz. Eski (umumiy) summa kiritilgan bo'lsa,
+    // undan kelib chiqqan qiymatlar ko'rsatiladi — foydalanuvchi ularni
+    // haqiqiy kanal summalariga tuzatib chiqadi.
+    const drafts: { [ch: string]: string } = {};
+    (row?.chans || []).forEach((c) => {
+      if (c.actual !== undefined) drafts[c.id] = String(c.actual);
+      else if (c.factor !== undefined) drafts[c.id] = (c.logged * c.factor).toFixed(2);
+      else drafts[c.id] = '';
+    });
+    setActualDrafts(drafts);
     setFetchNote(null);
   };
 
@@ -160,7 +183,7 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
     setEditingMonth(null);
     setRateDraft('');
     setDateDraft('');
-    setActualDraft('');
+    setActualDrafts({});
     setFetchNote(null);
   };
 
@@ -176,25 +199,29 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
       rate = r;
     }
 
-    let actual: number | undefined;
-    if (actualDraft.trim() !== '') {
-      const a = num(actualDraft);
+    // Har bir kanal uchun alohida haqiqiy summa
+    const byChannel: { [ch: string]: number } = {};
+    for (const ch of Object.keys(actualDrafts)) {
+      const raw = (actualDrafts[ch] || '').trim();
+      if (raw === '') continue;
+      const a = num(raw);
       if (!Number.isFinite(a) || a < 0) {
-        setFetchNote("AdSense summasi manfiy bo'lmagan son bo'lishi kerak.");
+        setFetchNote("Kanal summasi manfiy bo'lmagan son bo'lishi kerak.");
         return;
       }
-      actual = a;
+      byChannel[ch] = a;
     }
+    const hasAnyChannel = Object.keys(byChannel).length > 0;
 
-    if (rate === undefined && actual === undefined) {
-      setFetchNote("Kamida bittasini kiriting: AdSense summasi yoki kurs.");
+    if (rate === undefined && !hasAnyChannel) {
+      setFetchNote("Kamida bittasini kiriting: kanal summasi yoki kurs.");
       return;
     }
 
     onChange(monthKey, {
       ...(rate !== undefined ? { rate } : {}),
       ...(dateDraft ? { date: dateDraft } : {}),
-      ...(actual !== undefined ? { actualUSD: actual } : {}),
+      ...(hasAnyChannel ? { actualByChannel: byChannel } : {}),
     });
     cancelEdit();
   };
@@ -269,8 +296,9 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
             <Info className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
             <p className="text-[11px] leading-relaxed text-sky-900 font-medium">
               Bir oylik daromad ikki bosqichda aniq bo'ladi:{' '}
-              <b>1) AdSense'ga pul tushadi</b> — summani kiriting, farq barcha kanallarga bir xil
-              foizda taqsimlanib, ehson va sof foyda qayta hisoblanadi.{' '}
+              <b>1) YouTube to'laydi</b> — HAR BIR kanalning yakuniy summasini alohida kiriting
+              (umumiy summani bo'lish noto'g'ri bo'lardi, chunki kamomad har bir kanalda har xil).
+              Ehson va sof foyda avtomatik qayta hisoblanadi.{' '}
               <b>2) Bankdan yechasiz</b> — kursni kiriting, shunda oyning so'mdagi hisobi qotadi.
               Ikkalasi mustaqil: birini hozir, ikkinchisini keyin kiritsangiz bo'ladi. Kunlik
               yozuvlaringizga tegilmaydi.
@@ -412,30 +440,44 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Kanallar kesimi (tuzatish qo'llangan oylarda) */}
-                  {adjusted && m.factor !== undefined && (
+                  {/* Kanallar kesimi — har birining Studio va haqiqiy summasi */}
+                  {m.adjusted && (
                     <div className="mt-3 pt-3 border-t border-slate-200/70 space-y-1.5">
-                      {channelSplit(m.key, m.factor).map((c) => (
+                      {m.chans.map((c) => (
                         <div key={c.id} className="flex items-center justify-between text-[10px]">
                           <span className="flex items-center gap-1.5 font-bold text-slate-600">
                             <span
                               className="w-2 h-2 rounded-full shrink-0"
                               style={{ backgroundColor: c.color }}
                             />
-                            {c.id === SELF_CHANNEL_ID ? (
+                            {c.isSelf ? (
                               <User className="w-2.5 h-2.5 text-slate-400" />
                             ) : (
                               <Youtube className="w-2.5 h-2.5 text-slate-400" />
                             )}
                             {c.name}
                           </span>
-                          <span className="flex items-center gap-1.5 font-semibold tabular-nums">
-                            <span className="text-slate-400 line-through">
-                              {formatUSD(c.before)}
+                          {c.factor !== undefined ? (
+                            <span className="flex items-center gap-1.5 font-semibold tabular-nums">
+                              <span className="text-slate-400 line-through">
+                                {formatUSD(c.logged)}
+                              </span>
+                              <ArrowRight className="w-2.5 h-2.5 text-slate-300" />
+                              <b className="text-slate-700">{formatUSD(c.logged * c.factor)}</b>
+                              <span
+                                className={`font-black ${
+                                  c.factor < 1 ? 'text-rose-500' : 'text-emerald-600'
+                                }`}
+                              >
+                                {c.factor >= 1 ? '+' : ''}
+                                {((c.factor - 1) * 100).toFixed(1)}%
+                              </span>
                             </span>
-                            <ArrowRight className="w-2.5 h-2.5 text-slate-300" />
-                            <b className="text-slate-700">{formatUSD(c.after)}</b>
-                          </span>
+                          ) : (
+                            <span className="font-semibold tabular-nums text-slate-400">
+                              {formatUSD(c.logged)} · kutilmoqda
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -450,23 +492,67 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
                     >
                       {/* 1-bosqich: AdSense'ga pul tushdi (oyning ~7-12 kunlari) */}
                       <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-100">
-                        <div className="flex items-center gap-1.5 mb-1.5">
+                        <div className="flex items-center gap-1.5 mb-2">
                           <span className="w-4 h-4 rounded-full bg-indigo-500 text-white text-[9px] font-black flex items-center justify-center shrink-0">
                             1
                           </span>
                           <label className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">
-                            AdSense'ga kelgan summa (USD)
+                            Har bir kanalning haqiqiy summasi (USD)
                           </label>
                         </div>
-                        <input
-                          inputMode="decimal"
-                          value={actualDraft}
-                          onChange={(e) => setActualDraft(sanitize(e.target.value))}
-                          onKeyDown={(e) => e.key === 'Enter' && save(m.key)}
-                          placeholder={`Studio bo'yicha ${m.loggedUSD.toFixed(2)}`}
-                          className="w-full px-3 py-2.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700 placeholder-slate-300"
-                        />
-                        <p className="text-[9px] text-indigo-400 font-semibold mt-1">
+
+                        <div className="space-y-2">
+                          {m.chans.map((c) => {
+                            const raw = (actualDrafts[c.id] || '').trim();
+                            const val = raw === '' ? NaN : num(raw);
+                            const diff =
+                              Number.isFinite(val) && c.logged > 0
+                                ? ((val - c.logged) / c.logged) * 100
+                                : null;
+                            return (
+                              <div key={c.id} className="flex items-center gap-2">
+                                <span className="flex items-center gap-1.5 w-28 shrink-0 min-w-0">
+                                  <span
+                                    className="w-2 h-2 rounded-full shrink-0"
+                                    style={{ backgroundColor: c.color }}
+                                  />
+                                  <span className="text-[10px] font-bold text-slate-600 truncate">
+                                    {c.name}
+                                  </span>
+                                </span>
+                                <input
+                                  inputMode="decimal"
+                                  value={actualDrafts[c.id] || ''}
+                                  onChange={(e) =>
+                                    setActualDrafts((d) => ({
+                                      ...d,
+                                      [c.id]: sanitize(e.target.value),
+                                    }))
+                                  }
+                                  onKeyDown={(e) => e.key === 'Enter' && save(m.key)}
+                                  placeholder={`Studio: ${c.logged.toFixed(2)}`}
+                                  className="flex-1 min-w-0 px-3 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700 placeholder-slate-300"
+                                />
+                                <span
+                                  className={`w-14 shrink-0 text-right text-[10px] font-black tabular-nums ${
+                                    diff === null
+                                      ? 'text-slate-300'
+                                      : diff < 0
+                                      ? 'text-rose-500'
+                                      : 'text-emerald-600'
+                                  }`}
+                                >
+                                  {diff === null
+                                    ? '—'
+                                    : `${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%`}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <p className="text-[9px] text-indigo-400 font-semibold mt-2">
+                          Har bir kanalning YouTube Studio'dagi yakuniy summasini kiriting.
                           Faqat shuni kiritsangiz ham bo'ladi — kurs keyin so'raladi.
                         </p>
                       </div>
@@ -508,49 +594,6 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
                           Kurs kiritilgach bu oyning so'mdagi hisobi qotadi.
                         </p>
                       </div>
-
-                      {/* Jonli oldindan ko'rish */}
-                      {actualDraft.trim() !== '' &&
-                        Number.isFinite(num(actualDraft)) &&
-                        m.loggedUSD > 0 && (
-                          <div className="mt-3 p-3 rounded-xl bg-white border border-slate-200">
-                            <p className="text-[10px] font-bold text-slate-500 mb-2">
-                              Studio {formatUSD(m.loggedUSD)} → AdSense{' '}
-                              {formatUSD(num(actualDraft))}{' '}
-                              <span
-                                className={
-                                  num(actualDraft) < m.loggedUSD ? 'text-rose-500' : 'text-emerald-600'
-                                }
-                              >
-                                ({num(actualDraft) >= m.loggedUSD ? '+' : ''}
-                                {(((num(actualDraft) - m.loggedUSD) / m.loggedUSD) * 100).toFixed(1)}%)
-                              </span>
-                            </p>
-                            <div className="space-y-1">
-                              {channelSplit(m.key, num(actualDraft) / m.loggedUSD).map((c) => (
-                                <div
-                                  key={c.id}
-                                  className="flex items-center justify-between text-[10px]"
-                                >
-                                  <span className="flex items-center gap-1.5 font-bold text-slate-600">
-                                    <span
-                                      className="w-2 h-2 rounded-full shrink-0"
-                                      style={{ backgroundColor: c.color }}
-                                    />
-                                    {c.name}
-                                  </span>
-                                  <span className="flex items-center gap-1.5 font-semibold tabular-nums">
-                                    <span className="text-slate-400 line-through">
-                                      {formatUSD(c.before)}
-                                    </span>
-                                    <ArrowRight className="w-2.5 h-2.5 text-slate-300" />
-                                    <b className="text-slate-700">{formatUSD(c.after)}</b>
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
 
                       <div className="flex flex-wrap items-center gap-2 mt-3">
                         <button

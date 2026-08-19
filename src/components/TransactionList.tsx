@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Transaction, Channel, SelfChannel, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, isSelfTx, SELF_CHANNEL_ID, txUZS, txUSD, isSettled, channelInfo, txDisplayName } from '../types';
+import { Transaction, Channel, SelfChannel, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, isSelfTx, SELF_CHANNEL_ID, txUZS, txUSD, isSettled, channelInfo, txDisplayName, channelKeyOf } from '../types';
 import { Trash2, Edit2, Search, Filter, Calendar, DollarSign, Banknote, ArrowUpRight, ArrowDownRight, Youtube, User } from 'lucide-react';
 
 interface TransactionListProps {
@@ -209,7 +209,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 const txMonth = t.date.slice(0, 7);
                 const settled = isSettled(txMonth, payouts);
                 // AdSense bo'yicha tuzatish qo'llanganmi (Studio raqamidan farqi)?
-                const adjFactor = factors[txMonth];
+                const adjFactor = factors[txMonth]?.[channelKeyOf(t)];
                 const adjusted = adjFactor !== undefined && t.currency === 'USD';
 
                 const prevM = getPrevMonthStr(t.date.slice(0, 7));

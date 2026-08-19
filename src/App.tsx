@@ -26,6 +26,7 @@ import {
   Gauge,
   Youtube,
   Banknote,
+  Activity,
 } from 'lucide-react';
 import { Transaction, MonthlyStats, Channel, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, SELF_CHANNEL_ID, isSelfTx, txUZS, txUSD, isSettled, payoutFactors, Payout, isEmptyPayout, isValidRate, SelfChannel, channelInfo, DEFAULT_SELF_NAME } from './types';
 import { MetricCard } from './components/MetricCard';
@@ -42,6 +43,7 @@ import { IncomeForecastCard } from './components/IncomeForecastCard';
 import { ChannelsModal } from './components/ChannelsModal';
 import { ChannelBreakdownCard } from './components/ChannelBreakdownCard';
 import { PayoutsModal } from './components/PayoutsModal';
+import { AnalyticsModal } from './components/AnalyticsModal';
 import { saveUserData, fetchUserData, mergeUserData, hashPassword, UserData } from './services/db';
 
 export default function App() {
@@ -56,6 +58,7 @@ export default function App() {
   const [payouts, setPayouts] = useState<Payouts>({});
   const [selfChannel, setSelfChannel] = useState<SelfChannel | undefined>(undefined);
   const [isPayoutsOpen, setIsPayoutsOpen] = useState(false);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [viewScope, setViewScope] = useState<string>('all'); // 'all' | 'self' | <channelId>
   const [isChannelsOpen, setIsChannelsOpen] = useState(false);
   const [userPassword, setUserPassword] = useState<string>('');
@@ -170,7 +173,13 @@ export default function App() {
       ch: [...(d.channels || [])].sort((a, b) => a.id.localeCompare(b.id)).map((c) => [c.id, c.name]),
       p: Object.keys(d.payouts || {})
         .sort()
-        .map((m) => [m, d.payouts![m]?.rate, d.payouts![m]?.date, d.payouts![m]?.actualUSD]),
+        .map((m) => [
+          m,
+          d.payouts![m]?.rate,
+          d.payouts![m]?.date,
+          d.payouts![m]?.actualUSD,
+          Object.entries(d.payouts![m]?.actualByChannel || {}).sort(([a], [b]) => a.localeCompare(b)),
+        ]),
       sc: [d.selfChannel?.name || '', d.selfChannel?.color || ''],
     });
 
@@ -1080,6 +1089,16 @@ export default function App() {
               )}
             </button>
 
+            {/* Chuqur tahlil */}
+            <button
+              onClick={() => setIsAnalyticsOpen(true)}
+              className="py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-all active:scale-[0.98]"
+              title="Mavsumiylik, kanallar taqqoslash va oy kunlari naqshi"
+            >
+              <Activity className="w-3.5 h-3.5 text-violet-500" />
+              Tahlil
+            </button>
+
             {/* Start New Month Button */}
             <button
               onClick={handleStartNewMonth}
@@ -1393,11 +1412,23 @@ export default function App() {
         onSelfChange={handleSelfChannelChange}
       />
 
+      <AnalyticsModal
+        isOpen={isAnalyticsOpen}
+        onClose={() => setIsAnalyticsOpen(false)}
+        transactions={transactions}
+        channels={channels}
+        selfChannel={selfChannel}
+        exchangeRate={exchangeRate}
+        payouts={payouts}
+        factors={factors}
+      />
+
       <PayoutsModal
         isOpen={isPayoutsOpen}
         onClose={() => setIsPayoutsOpen(false)}
         transactions={transactions}
         channels={channels}
+        selfChannel={selfChannel}
         exchangeRate={exchangeRate}
         payouts={payouts}
         factors={factors}
