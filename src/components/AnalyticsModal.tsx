@@ -285,7 +285,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
                             className="w-2.5 h-2.5 rounded-full shrink-0"
                             style={{ backgroundColor: meta.color }}
                           />
-                          {meta.isSelf ? (
+                          {meta.owned ? (
                             <User className="w-3 h-3 text-slate-400 shrink-0" />
                           ) : (
                             <Youtube className="w-3 h-3 text-slate-400 shrink-0" />

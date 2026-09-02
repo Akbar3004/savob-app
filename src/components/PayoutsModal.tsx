@@ -118,7 +118,7 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
               id,
               name: info.name,
               color: info.color,
-              isSelf: info.isSelf,
+              owned: info.owned,
               logged: byCh[id],
               actual: typeof actual === 'number' && Number.isFinite(actual) ? actual : undefined,
               factor: factors[m]?.[id],
@@ -450,7 +450,7 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
                               className="w-2 h-2 rounded-full shrink-0"
                               style={{ backgroundColor: c.color }}
                             />
-                            {c.isSelf ? (
+                            {c.owned ? (
                               <User className="w-2.5 h-2.5 text-slate-400" />
                             ) : (
                               <Youtube className="w-2.5 h-2.5 text-slate-400" />

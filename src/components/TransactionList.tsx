@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Transaction, Channel, SelfChannel, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, isSelfTx, SELF_CHANNEL_ID, txUZS, txUSD, isSettled, channelInfo, txDisplayName, channelKeyOf } from '../types';
+import { Transaction, Channel, SelfChannel, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, hasCharityTx, CHANNEL_MODE_LABELS, SELF_CHANNEL_ID, txUZS, txUSD, isSettled, channelInfo, txDisplayName, channelKeyOf } from '../types';
 import { Trash2, Edit2, Search, Filter, Calendar, DollarSign, Banknote, ArrowUpRight, ArrowDownRight, Youtube, User } from 'lucide-react';
 
 interface TransactionListProps {
@@ -194,8 +194,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
               {filteredTransactions.map((t) => {
                 const amtUZS = getAmountInUZS(t);
                 const amtUSD = getAmountInUSD(t);
-                // Ehson faqat "meniki" yozuvdan; boshqa kanal uchun 0
-                const rowPct = isSelfTx(t) ? currentPercentage : 0;
+                // Ehson faqat ehsonli kanaldan; ehsonsiz/boshqa kanal uchun 0
+                const rowPct = hasCharityTx(t, channels) ? currentPercentage : 0;
                 const charityUZS = (amtUZS * rowPct) / 100;
                 const charityUSD = (amtUSD * rowPct) / 100;
                 const netUZS = amtUZS - charityUZS;
@@ -237,9 +237,9 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                         <span
                           style={{ backgroundColor: `${chan.color}18`, color: chan.color }}
                           className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold"
-                          title={chan.isSelf ? 'Shaxsiy kanal — ehson ushlanadi' : 'Boshqa kanal — ehsonsiz'}
+                          title={CHANNEL_MODE_LABELS[chan.mode]}
                         >
-                          {chan.isSelf ? <User className="w-2.5 h-2.5" /> : <Youtube className="w-2.5 h-2.5" />}
+                          {chan.owned ? <User className="w-2.5 h-2.5" /> : <Youtube className="w-2.5 h-2.5" />}
                           {chan.name}
                         </span>
                       </div>

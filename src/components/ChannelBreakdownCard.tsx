@@ -13,6 +13,7 @@ import {
   txUZS,
   txUSD,
   isSelfTx,
+  hasCharityTx,
   channelInfo,
   SELF_CHANNEL_ID,
 } from '../types';
@@ -57,8 +58,8 @@ export const ChannelBreakdownCard: React.FC<ChannelBreakdownCardProps> = ({
       const uzs = txUZS(t, payouts, exchangeRate, factors);
       acc[id].uzs += uzs;
       acc[id].usd += txUSD(t, payouts, exchangeRate, factors);
-      // Ehson faqat shaxsiy kanaldan ushlanadi
-      if (isSelfTx(t)) acc[id].charityUZS += (uzs * charityPercentage) / 100;
+      // Ehson faqat ehsonli kanallardan ushlanadi
+      if (hasCharityTx(t, channels)) acc[id].charityUZS += (uzs * charityPercentage) / 100;
       acc[id].count += 1;
     });
 
@@ -118,17 +119,21 @@ export const ChannelBreakdownCard: React.FC<ChannelBreakdownCardProps> = ({
                   className="w-2.5 h-2.5 rounded-full shrink-0"
                   style={{ backgroundColor: r.color }}
                 />
-                {r.isSelf ? (
+                {r.owned ? (
                   <User className="w-3 h-3 text-slate-400 shrink-0" />
                 ) : (
                   <Youtube className="w-3 h-3 text-slate-400 shrink-0" />
                 )}
                 <span className="text-xs font-bold text-slate-700 truncate">{r.name}</span>
-                {r.isSelf && (
+                {r.charity ? (
                   <span className="hidden sm:inline text-[9px] font-black text-amber-500 uppercase tracking-wide bg-amber-50 px-1.5 py-0.5 rounded-md shrink-0">
                     Ehsonli
                   </span>
-                )}
+                ) : r.owned ? (
+                  <span className="hidden sm:inline text-[9px] font-black text-indigo-400 uppercase tracking-wide bg-indigo-50 px-1.5 py-0.5 rounded-md shrink-0">
+                    Meniki
+                  </span>
+                ) : null}
               </div>
               <div className="text-right shrink-0">
                 <p className="text-xs font-black text-slate-800 font-display tabular-nums">

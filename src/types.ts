@@ -11,12 +11,53 @@ export interface Transaction {
   channelId?: string;
 }
 
-// Boshqa (o'zimniki bo'lmagan) YouTube kanallari. 'self' bu ro'yxatga kirmaydi.
+// Qo'shimcha YouTube kanallari. Asosiy shaxsiy kanal ('self') bu ro'yxatga kirmaydi.
 export interface Channel {
   id: string;
   name: string;
   color?: string;
+  /**
+   * Kanal "meniki"mi — ya'ni daromadi shaxsiy statistikaga (jami daromad,
+   * maqsad, taxmin, oylik hisobot) qo'shiladimi?
+   * Eski kanallarda yo'q => `false` (avvalgi xatti-harakat aynan saqlanadi).
+   */
+  owned?: boolean;
+  /**
+   * Shu kanaldan ehson ushlanadimi? Faqat `owned` bo'lganda ma'noga ega.
+   * Shunday qilib kanal uch xil bo'ladi:
+   *   owned + charity  -> meniki, ehson ushlanadi
+   *   owned            -> meniki, lekin ehsonsiz (masalan sherikning ulushi)
+   *   (hech biri)      -> boshqa kanal: statistikaga ham, ehsonga ham kirmaydi
+   */
+  charity?: boolean;
 }
+
+/** Kanalning uch rejimi — UI va mantiq uchun yagona nom. */
+export type ChannelMode = 'own_charity' | 'own_plain' | 'other';
+
+export function channelMode(c: Pick<Channel, 'owned' | 'charity'>): ChannelMode {
+  if (!c.owned) return 'other';
+  return c.charity ? 'own_charity' : 'own_plain';
+}
+
+export function modeFlags(mode: ChannelMode): { owned: boolean; charity: boolean } {
+  if (mode === 'own_charity') return { owned: true, charity: true };
+  if (mode === 'own_plain') return { owned: true, charity: false };
+  return { owned: false, charity: false };
+}
+
+export const CHANNEL_MODE_LABELS: { [k in ChannelMode]: string } = {
+  own_charity: 'Meniki — ehson ushlanadi',
+  own_plain: 'Meniki — ehsonsiz',
+  other: 'Boshqa kanal — ehsonsiz',
+};
+
+/** Ro'yxat/tanlov ichida qisqa ko'rsatish uchun. */
+export const CHANNEL_MODE_SHORT: { [k in ChannelMode]: string } = {
+  own_charity: 'meniki, ehsonli',
+  own_plain: 'meniki, ehsonsiz',
+  other: 'boshqa kanal',
+};
 
 export const SELF_CHANNEL_ID = 'self';
 
@@ -32,9 +73,31 @@ export interface SelfChannel {
 export const DEFAULT_SELF_NAME = 'Meniki';
 export const DEFAULT_SELF_COLOR = '#6366f1';
 
-/** Tranzaksiya sizning ("meniki") daromadingizmi? Faqat 'self' dan ehson ushlanadi. */
-export function isSelfTx(t: Transaction): boolean {
+/** Faqat kanal tegishliligi muhim bo'lgan joylar uchun (yozuv to'liq bo'lishi shart emas). */
+type HasChannel = Pick<Transaction, 'channelId'>;
+
+/** Yozuv asosiy shaxsiy kanalgami ('self')? */
+export function isSelfTx(t: HasChannel): boolean {
   return !t.channelId || t.channelId === SELF_CHANNEL_ID;
+}
+
+/**
+ * Yozuv SHAXSIY statistikaga kiradimi (jami daromad, maqsad, taxmin, hisobot)?
+ * 'self' har doim meniki; qo'shimcha kanal esa "meniki" deb belgilangan bo'lsa.
+ */
+export function isOwnedTx(t: HasChannel, channels: Channel[]): boolean {
+  if (isSelfTx(t)) return true;
+  return channels.find((c) => c.id === t.channelId)?.owned === true;
+}
+
+/**
+ * Shu yozuvdan ehson ushlanadimi?
+ * 'self' — har doim; boshqa kanal — faqat "meniki + ehsonli" bo'lsa.
+ */
+export function hasCharityTx(t: HasChannel, channels: Channel[]): boolean {
+  if (isSelfTx(t)) return true;
+  const c = channels.find((x) => x.id === t.channelId);
+  return c?.owned === true && c?.charity === true;
 }
 
 /** Kanal ko'rinishi (nom + rang) — self va boshqa kanallar uchun yagona manba. */
@@ -42,7 +105,13 @@ export interface ChannelInfo {
   id: string;
   name: string;
   color: string;
+  /** Asosiy shaxsiy kanalmi ('self')? */
   isSelf: boolean;
+  /** Shaxsiy statistikaga kiradimi ('self' yoki "meniki" deb belgilangan kanal)? */
+  owned: boolean;
+  /** Ehson ushlanadimi? */
+  charity: boolean;
+  mode: ChannelMode;
 }
 
 /**
@@ -60,14 +129,22 @@ export function channelInfo(
       name: self?.name?.trim() || DEFAULT_SELF_NAME,
       color: self?.color || DEFAULT_SELF_COLOR,
       isSelf: true,
+      owned: true,
+      charity: true,
+      mode: 'own_charity',
     };
   }
   const c = channels.find((x) => x.id === channelId);
+  const owned = c?.owned === true;
+  const charity = owned && c?.charity === true;
   return {
     id: channelId,
     name: c?.name || 'Boshqa kanal',
     color: c?.color || '#f43f5e',
     isSelf: false,
+    owned,
+    charity,
+    mode: channelMode({ owned, charity }),
   };
 }
 
