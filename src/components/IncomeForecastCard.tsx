@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { TrendingUp, Sparkles, Target, Info, ShieldCheck, Scale, Rocket } from 'lucide-react';
 import {
   Transaction,
+  Channel,
   Payouts,
   PayoutFactors,
   formatUZS,
@@ -10,7 +11,8 @@ import {
   MONTH_NAMES,
   txUZS,
   rateForMonth,
-  isSelfTx,
+  isOwnedTx,
+  hasCharityTx,
 } from '../types';
 import {
   computeForecast,
@@ -22,6 +24,8 @@ import {
 
 interface IncomeForecastCardProps {
   transactions: Transaction[];
+  /** Kanal rejimlari kerak: qaysi kanal "meniki" va qaysisidan ehson ushlanadi. */
+  channels: Channel[];
   charityPercentage: number;
   exchangeRate: number;
   payouts: Payouts;
@@ -53,6 +57,7 @@ const LEVEL_META: {
 
 export const IncomeForecastCard: React.FC<IncomeForecastCardProps> = ({
   transactions,
+  channels,
   charityPercentage,
   exchangeRate,
   payouts,
@@ -64,19 +69,19 @@ export const IncomeForecastCard: React.FC<IncomeForecastCardProps> = ({
   const todayMonthKey = new Date().toISOString().slice(0, 7);
   const isCurrentMonth = monthKey === todayMonthKey;
 
-  // Taxmin maqsad bilan BIR XIL asosda hisoblanadi: faqat shaxsiy kanal,
+  // Taxmin maqsad bilan BIR XIL asosda hisoblanadi: faqat "meniki" kanallar,
   // ehson ayirilgandan keyingi sof summa. Shunda tavsiya qilingan maqsad
   // to'g'ridan-to'g'ri maqsad kartasi bilan solishtiriladi.
   const daily: DailyTotals = useMemo(() => {
     const out: DailyTotals = {};
     for (const t of transactions) {
-      if (!isSelfTx(t)) continue;
+      if (!isOwnedTx(t, channels)) continue;
       const uzs = txUZS(t, payouts, exchangeRate, factors);
-      const net = uzs - (uzs * charityPercentage) / 100;
+      const net = hasCharityTx(t, channels) ? uzs - (uzs * charityPercentage) / 100 : uzs;
       out[t.date] = (out[t.date] || 0) + net;
     }
     return out;
-  }, [transactions, payouts, exchangeRate, factors, charityPercentage]);
+  }, [transactions, channels, payouts, exchangeRate, factors, charityPercentage]);
 
   const forecast = useMemo(() => {
     if (!isCurrentMonth) return null;

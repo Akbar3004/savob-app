@@ -28,7 +28,7 @@ import {
   Banknote,
   Activity,
 } from 'lucide-react';
-import { Transaction, MonthlyStats, Channel, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, SELF_CHANNEL_ID, isSelfTx, txUZS, txUSD, isSettled, payoutFactors, Payout, isEmptyPayout, isValidRate, SelfChannel, channelInfo, DEFAULT_SELF_NAME } from './types';
+import { Transaction, MonthlyStats, Channel, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, SELF_CHANNEL_ID, isOwnedTx, hasCharityTx, txUZS, txUSD, isSettled, payoutFactors, Payout, isEmptyPayout, isValidRate, SelfChannel, channelInfo, DEFAULT_SELF_NAME } from './types';
 import { MetricCard } from './components/MetricCard';
 import { TransactionForm } from './components/TransactionForm';
 import { MonthlyChart } from './components/MonthlyChart';
@@ -164,13 +164,15 @@ export default function App() {
     JSON.stringify({
       t: [...d.transactions]
         .sort((a, b) => a.id.localeCompare(b.id))
-        .map((x) => [x.id, x.amount, x.currency, x.date, x.category, x.description]),
+        .map((x) => [x.id, x.amount, x.currency, x.date, x.category, x.description, x.channelId || '', x.charityPercentage]),
       c: d.charityPercentage,
       r: d.exchangeRate,
       g: d.incomeGoals || {},
       y: d.yearlyGoals || {},
       del: [...(d.deletedIds || [])].sort(),
-      ch: [...(d.channels || [])].sort((a, b) => a.id.localeCompare(b.id)).map((c) => [c.id, c.name]),
+      ch: [...(d.channels || [])]
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map((c) => [c.id, c.name, c.color || '', !!c.owned, !!c.charity]),
       p: Object.keys(d.payouts || {})
         .sort()
         .map((m) => [
@@ -517,8 +519,26 @@ export default function App() {
     if (viewScope !== 'all' && viewScope !== 'self' && !updated.some((c) => c.id === viewScope)) {
       setViewScope('all');
     }
+
+    // Kanal rejimi o'zgargan bo'lishi mumkin (ehsonli <-> ehsonsiz), shuning
+    // uchun yozuvlardagi saqlangan ehson foizini qayta muhrlaymiz. Aks holda
+    // batafsil statistika va PDF eski foizni ko'rsatib, asosiy kartalardan
+    // farq qilib qolardi.
+    const restamped = transactions.map((t) => {
+      // Ehson yoqilsa: yozuvda avvaldan foiz saqlangan bo'lsa (tarixiy foiz)
+      // o'shani qoldiramiz, aks holda joriy foizni qo'yamiz. O'chirilsa — 0.
+      const pct = hasCharityTx(t, updated)
+        ? t.charityPercentage > 0
+          ? t.charityPercentage
+          : charityPercentage
+        : 0;
+      return t.charityPercentage === pct ? t : { ...t, charityPercentage: pct };
+    });
+    const changed = restamped.some((t, i) => t !== transactions[i]);
+    if (changed) setTransactions(restamped);
+
     if (binId) {
-      performSync(transactions, charityPercentage, exchangeRate, binId, incomeGoals, yearlyGoals, deletedIdsRef.current, updated);
+      performSync(restamped, charityPercentage, exchangeRate, binId, incomeGoals, yearlyGoals, deletedIdsRef.current, updated);
     }
   };
 
@@ -590,9 +610,9 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Ehson faqat "meniki" kanaldan ushlanadi — boshqa kanalda 0 saqlanadi
+  // Ehson faqat ehsonli kanallardan ushlanadi — qolganlarida 0 saqlanadi
   const charityForChannel = (channelId?: string) =>
-    !channelId || channelId === SELF_CHANNEL_ID ? charityPercentage : 0;
+    hasCharityTx({ channelId }, channels) ? charityPercentage : 0;
 
   const handleAddTransaction = (newTx: Omit<Transaction, 'id' | 'charityPercentage'>) => {
     const tx: Transaction = {
@@ -697,9 +717,10 @@ export default function App() {
   // 'all' = hammasi, 'self' = faqat meniki, aks holda kanal id'si
   const scopedTransactions = useMemo(() => {
     if (viewScope === 'all') return transactions;
-    if (viewScope === 'self') return transactions.filter(isSelfTx);
+    // "Meniki" qamroviga asosiy kanal VA "meniki" deb belgilangan kanallar kiradi
+    if (viewScope === 'self') return transactions.filter((t) => isOwnedTx(t, channels));
     return transactions.filter(t => t.channelId === viewScope);
-  }, [transactions, viewScope]);
+  }, [transactions, viewScope, channels]);
 
   // Filter transactions by selected period
   const periodTransactions = useMemo(() => {
@@ -707,18 +728,18 @@ export default function App() {
     return scopedTransactions.filter(t => t.date.startsWith(selectedPeriod));
   }, [scopedTransactions, selectedPeriod]);
 
-  // Totals — ehson FAQAT "meniki" (self) qismidan hisoblanadi
+  // Totals — ehson FAQAT ehsonli kanallardan (self + "meniki, ehsonli") hisoblanadi
   const totalUZS = useMemo(() => periodTransactions.reduce((sum, t) => sum + toUZS(t), 0), [periodTransactions, exchangeRate, payouts, factors]);
   const totalUSD = useMemo(() => periodTransactions.reduce((sum, t) => sum + toUSD(t), 0), [periodTransactions, exchangeRate, payouts, factors]);
-  const selfUZS = useMemo(() => periodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUZS(t), 0), [periodTransactions, exchangeRate, payouts, factors]);
-  const selfUSD = useMemo(() => periodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUSD(t), 0), [periodTransactions, exchangeRate, payouts, factors]);
-  const charityUZS = useMemo(() => (selfUZS * charityPercentage) / 100, [selfUZS, charityPercentage]);
-  const charityUSD = useMemo(() => (selfUSD * charityPercentage) / 100, [selfUSD, charityPercentage]);
+  const charityBaseUZS = useMemo(() => periodTransactions.filter((t) => hasCharityTx(t, channels)).reduce((sum, t) => sum + toUZS(t), 0), [periodTransactions, channels, exchangeRate, payouts, factors]);
+  const charityBaseUSD = useMemo(() => periodTransactions.filter((t) => hasCharityTx(t, channels)).reduce((sum, t) => sum + toUSD(t), 0), [periodTransactions, channels, exchangeRate, payouts, factors]);
+  const charityUZS = useMemo(() => (charityBaseUZS * charityPercentage) / 100, [charityBaseUZS, charityPercentage]);
+  const charityUSD = useMemo(() => (charityBaseUSD * charityPercentage) / 100, [charityBaseUSD, charityPercentage]);
   // Sof = jami − ehson = (mening sofim) + (boshqa kanal puli)
   const netUZS = useMemo(() => totalUZS - charityUZS, [totalUZS, charityUZS]);
   const netUSD = useMemo(() => totalUSD - charityUSD, [totalUSD, charityUSD]);
-  // Ko'rinishda boshqa kanal puli bormi (kartalar matnini moslash uchun)
-  const hasOtherInView = useMemo(() => periodTransactions.some(t => !isSelfTx(t)), [periodTransactions]);
+  // Ko'rinishda meniki bo'lmagan kanal puli bormi (kartalar matnini moslash uchun)
+  const hasOtherInView = useMemo(() => periodTransactions.some(t => !isOwnedTx(t, channels)), [periodTransactions, channels]);
 
   // Calculate comparison with previous month for top cards
   const prevPeriod = useMemo(() => {
@@ -736,8 +757,8 @@ export default function App() {
   }, [scopedTransactions, prevPeriod]);
 
   const prevTotalUZS = useMemo(() => prevPeriodTransactions.reduce((sum, t) => sum + toUZS(t), 0), [prevPeriodTransactions, exchangeRate, payouts, factors]);
-  const prevSelfUZS = useMemo(() => prevPeriodTransactions.filter(isSelfTx).reduce((sum, t) => sum + toUZS(t), 0), [prevPeriodTransactions, exchangeRate, payouts, factors]);
-  const prevCharityUZS = useMemo(() => (prevSelfUZS * charityPercentage) / 100, [prevSelfUZS, charityPercentage]);
+  const prevCharityBaseUZS = useMemo(() => prevPeriodTransactions.filter((t) => hasCharityTx(t, channels)).reduce((sum, t) => sum + toUZS(t), 0), [prevPeriodTransactions, channels, exchangeRate, payouts, factors]);
+  const prevCharityUZS = useMemo(() => (prevCharityBaseUZS * charityPercentage) / 100, [prevCharityBaseUZS, charityPercentage]);
   const prevNetUZS = useMemo(() => prevTotalUZS - prevCharityUZS, [prevTotalUZS, prevCharityUZS]);
 
   const totalComparePct = useMemo(() => {
@@ -780,18 +801,18 @@ export default function App() {
   const isOtherChannelView = viewScope !== 'all' && viewScope !== 'self';
 
   const monthlyStats = useMemo(() => {
-    // Grafik ham ko'rish qamroviga (viewScope) bo'ysunadi; ehson faqat self'dan
-    const groups: { [key: string]: { uzs: number; usd: number; selfUzs: number; selfUsd: number; count: number } } = {};
+    // Grafik ham ko'rish qamroviga (viewScope) bo'ysunadi; ehson faqat ehsonli kanallardan
+    const groups: { [key: string]: { uzs: number; usd: number; chUzs: number; chUsd: number; count: number } } = {};
     scopedTransactions.forEach((t) => {
       const monthKey = t.date.slice(0, 7);
-      if (!groups[monthKey]) groups[monthKey] = { uzs: 0, usd: 0, selfUzs: 0, selfUsd: 0, count: 0 };
+      if (!groups[monthKey]) groups[monthKey] = { uzs: 0, usd: 0, chUzs: 0, chUsd: 0, count: 0 };
       const u = toUZS(t);
       const d = toUSD(t);
       groups[monthKey].uzs += u;
       groups[monthKey].usd += d;
-      if (isSelfTx(t)) {
-        groups[monthKey].selfUzs += u;
-        groups[monthKey].selfUsd += d;
+      if (hasCharityTx(t, channels)) {
+        groups[monthKey].chUzs += u;
+        groups[monthKey].chUsd += d;
       }
       groups[monthKey].count += 1;
     });
@@ -800,8 +821,8 @@ export default function App() {
       const [year, month] = monthKey.split('-');
       const monthName = MONTH_NAMES[month] ? `${MONTH_NAMES[month]} ${year}` : monthKey;
       const g = groups[monthKey];
-      const charityUZS = (g.selfUzs * charityPercentage) / 100;
-      const charityUSD = (g.selfUsd * charityPercentage) / 100;
+      const charityUZS = (g.chUzs * charityPercentage) / 100;
+      const charityUSD = (g.chUsd * charityPercentage) / 100;
       return {
         monthKey,
         monthName,
@@ -816,7 +837,7 @@ export default function App() {
     });
 
     return statsList.sort((a, b) => a.monthKey.localeCompare(b.monthKey));
-  }, [scopedTransactions, charityPercentage, exchangeRate, payouts, factors]);
+  }, [scopedTransactions, channels, charityPercentage, exchangeRate, payouts, factors]);
 
   // Export/Import backup
   const handleExportData = () => {
@@ -1118,6 +1139,7 @@ export default function App() {
             <>
             <IncomeGoalCard
               transactions={transactions}
+              channels={channels}
               charityPercentage={charityPercentage}
               exchangeRate={exchangeRate}
               payouts={payouts}
@@ -1130,6 +1152,7 @@ export default function App() {
             />
             <IncomeForecastCard
               transactions={transactions}
+              channels={channels}
               charityPercentage={charityPercentage}
               exchangeRate={exchangeRate}
               payouts={payouts}

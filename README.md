@@ -7,6 +7,11 @@ Kunlik daromadlarni kiritish, jamg'armani kuzatish, belgilangan foizda hayriya (
 - 💰 UZS va USD valyutalarida tushumlarni kiritish
 - 📺 Kanallar: shaxsiy kanalga o'z nomi va rangini berish, boshqa kanallarni
   qo'shish. "Ijtimoiy tarmoq" tanlanganda izoh avtomatik kanal nomi bo'ladi
+- 👤 Kanal rejimi: har bir kanal uchta holatdan birida bo'ladi —
+  **meniki, ehsonli** (shaxsiy statistikaga kiradi va ehson ushlanadi),
+  **meniki, ehsonsiz** (shaxsiy statistikaga kiradi, ehson ushlanmaydi) yoki
+  **boshqa kanal** (na statistikaga, na ehsonga kiradi). Rejim o'zgartirilsa,
+  o'sha kanalning eski yozuvlari ham yangi qoidaga ko'ra qayta hisoblanadi
 - 🏆 Kanallar kesimi kartasi: har bir kanal shu davrda qancha ishlagani,
   eng ko'p daromad keltirgani yuqorida, o'z rangi bilan
 - 🔮 Oy oxiri taxmini: sizning o'z tarixingizdagi oy "shakli" asosida bu oy

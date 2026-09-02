@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Check, Edit2, X, DollarSign, Banknote, User, Youtube } from 'lucide-react';
-import { CATEGORIES, Transaction, Channel, SelfChannel, Payouts, PayoutFactors, SELF_CHANNEL_ID, formatUZS, formatUSD, rateForMonth, channelInfo } from '../types';
+import { CATEGORIES, Transaction, Channel, SelfChannel, Payouts, PayoutFactors, SELF_CHANNEL_ID, formatUZS, formatUSD, rateForMonth, channelInfo, channelMode, CHANNEL_MODE_SHORT } from '../types';
 
 interface TransactionFormProps {
   onAdd: (transaction: Omit<Transaction, 'id' | 'charityPercentage'>) => void;
@@ -35,9 +35,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const [channelId, setChannelId] = useState<string>(SELF_CHANNEL_ID);
   const [error, setError] = useState<string>('');
 
-  const isSelf = channelId === SELF_CHANNEL_ID;
-  // Tanlangan kanalning nomi va rangi (self ham, boshqa kanal ham)
+  // Tanlangan kanalning nomi, rangi va rejimi (meniki / ehsonli)
   const activeChannel = channelInfo(channelId, channels, selfChannel);
+  const isOwned = activeChannel.owned;
+  const takesCharity = activeChannel.charity;
   // Ijtimoiy tarmoq tushumida izoh = kanal nomi, shuning uchun izoh maydoni yashiriladi
   const isSocial = category === 'social_media';
 
@@ -155,8 +156,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const formRate = rateForMonth(date.slice(0, 7), payouts, exchangeRate);
   const amountInUZS = currency === 'USD' ? currentAmountNum * formRate : currentAmountNum;
   const amountInUSD = currency === 'UZS' ? currentAmountNum / formRate : currentAmountNum;
-  // Ehson faqat "meniki" (self) kanaldan ushlanadi; boshqa kanallarda 0
-  const effectivePct = isSelf ? charityPercentage : 0;
+  // Ehson faqat ehsonli kanaldan ushlanadi; ehsonsiz va boshqa kanallarda 0
+  const effectivePct = takesCharity ? charityPercentage : 0;
   const liveCharityUZS = (amountInUZS * effectivePct) / 100;
   const liveCharityUSD = (amountInUSD * effectivePct) / 100;
   const liveNetUZS = amountInUZS - liveCharityUZS;
@@ -215,7 +216,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               Qaysi kanal uchun
             </label>
             <div className="relative">
-              {isSelf ? (
+              {isOwned ? (
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-500 pointer-events-none" />
               ) : (
                 <Youtube className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-rose-500 pointer-events-none" />
@@ -225,10 +226,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                 onChange={(e) => setChannelId(e.target.value)}
                 className="w-full pl-9 pr-4 py-2.5 text-xs font-bold bg-slate-50/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-slate-700 cursor-pointer"
               >
-                <option value={SELF_CHANNEL_ID}>Meniki (ehson ushlanadi)</option>
+                <option value={SELF_CHANNEL_ID}>
+                  {channelInfo(SELF_CHANNEL_ID, channels, selfChannel).name} — ehson ushlanadi
+                </option>
                 {channels.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} (ehsonsiz)
+                    {c.name} — {CHANNEL_MODE_SHORT[channelMode(c)]}
                   </option>
                 ))}
               </select>
@@ -312,7 +315,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               </p>
             </div>
 
-            {isSelf ? (
+            {takesCharity ? (
               <div className="grid grid-cols-2 gap-2">
                 <div className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-100/60">
                   <p className="text-[10px] text-amber-500 font-bold uppercase mb-0.5">Hayriya ({charityPercentage}%)</p>
@@ -324,6 +327,15 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                   <p className="text-xs font-bold text-emerald-600">{formatUZS(liveNetUZS)}</p>
                   <p className="text-[10px] font-semibold text-emerald-400">{formatUSD(liveNetUSD)}</p>
                 </div>
+              </div>
+            ) : isOwned ? (
+              // "Meniki, ehsonsiz": pul to'liq sizniki va shaxsiy statistikaga kiradi
+              <div className="p-3 bg-gradient-to-br from-indigo-50 to-violet-50 rounded-xl border border-indigo-100/60">
+                <p className="text-[10px] text-indigo-500 font-bold uppercase mb-0.5">
+                  Meniki · ehsonsiz · to'liq sizga qoladi
+                </p>
+                <p className="text-sm font-bold text-indigo-600">{formatUZS(amountInUZS)}</p>
+                <p className="text-[10px] font-semibold text-indigo-400">{formatUSD(amountInUSD)}</p>
               </div>
             ) : (
               <div className="p-3 bg-gradient-to-br from-rose-50 to-red-50 rounded-xl border border-rose-100/60">

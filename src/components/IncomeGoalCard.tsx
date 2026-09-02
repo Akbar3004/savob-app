@@ -12,10 +12,12 @@ import {
   CalendarDays,
   Flame,
 } from 'lucide-react';
-import { Transaction, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, isSelfTx, txUZS, rateForMonth } from '../types';
+import { Transaction, Channel, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, isOwnedTx, hasCharityTx, txUZS, rateForMonth } from '../types';
 
 interface IncomeGoalCardProps {
   transactions: Transaction[];
+  /** Kanal rejimlari kerak: qaysi kanal "meniki" va qaysisidan ehson ushlanadi. */
+  channels: Channel[];
   charityPercentage: number;
   exchangeRate: number;
   payouts: Payouts;
@@ -46,6 +48,7 @@ const formatDisplay = (v: string) => (v ? v.replace(/\B(?=(\d{3})+(?!\d))/g, ' '
 
 export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
   transactions,
+  channels,
   charityPercentage,
   exchangeRate,
   payouts,
@@ -78,29 +81,32 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
   const monthRate = rateForMonth(monthKey, payouts, exchangeRate);
 
   // Berilgan prefiks ("YYYY-MM" yoki "YYYY") bo'yicha FAQAT MENING sof summam.
-  // Maqsadlar shaxsiy daromadga tegishli — boshqa kanallar puli hisobga olinmaydi.
-  const netForPrefix = (prefix: string): number => {
-    const totalUZS = transactions
-      .filter((t) => isSelfTx(t) && t.date.startsWith(prefix))
-      .reduce((sum, t) => sum + toUZS(t), 0);
-    return totalUZS - (totalUZS * charityPercentage) / 100;
-  };
+  // Maqsadlar shaxsiy daromadga tegishli: asosiy kanal + "meniki" deb
+  // belgilangan kanallar. Ehson esa faqat ehsonli kanallardan ayiriladi —
+  // ehsonsiz "meniki" kanalning puli to'liq hisobga olinadi.
+  const netForPrefix = (prefix: string): number =>
+    transactions
+      .filter((t) => isOwnedTx(t, channels) && t.date.startsWith(prefix))
+      .reduce((sum, t) => {
+        const uzs = toUZS(t);
+        return sum + (hasCharityTx(t, channels) ? uzs - (uzs * charityPercentage) / 100 : uzs);
+      }, 0);
 
   const netThisMonthUZS = useMemo(
     () => netForPrefix(monthKey),
-    [transactions, monthKey, charityPercentage, exchangeRate, payouts]
+    [transactions, channels, monthKey, charityPercentage, exchangeRate, payouts]
   );
 
   const prevMonthKey = useMemo(() => getPrevMonthKey(monthKey), [monthKey]);
   const prevMonthRate = rateForMonth(prevMonthKey, payouts, exchangeRate);
   const netPrevMonthUZS = useMemo(
     () => netForPrefix(prevMonthKey),
-    [transactions, prevMonthKey, charityPercentage, exchangeRate, payouts]
+    [transactions, channels, prevMonthKey, charityPercentage, exchangeRate, payouts]
   );
 
   const netThisYearUZS = useMemo(
     () => netForPrefix(year),
-    [transactions, year, charityPercentage, exchangeRate, payouts]
+    [transactions, channels, year, charityPercentage, exchangeRate, payouts]
   );
 
   const remainingUZS = Math.max(goal - netThisMonthUZS, 0);
