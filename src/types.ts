@@ -421,6 +421,26 @@ export function formatCompact(amount: number): string {
   return amount.toString();
 }
 
+/**
+ * Oyning uch harfli qisqartmasi (grafik o'qi uchun).
+ * Nomni shunchaki kesib olib bo'lmaydi: "Iyun" va "Iyul" ikkalasi ham
+ * "Iyu" bo'lib qolar va grafikda ikkita bir xil yorliq turardi.
+ */
+export const MONTH_ABBR: { [key: string]: string } = {
+  '01': 'Yan',
+  '02': 'Fev',
+  '03': 'Mar',
+  '04': 'Apr',
+  '05': 'May',
+  '06': 'Iyn',
+  '07': 'Iyl',
+  '08': 'Avg',
+  '09': 'Sen',
+  '10': 'Okt',
+  '11': 'Noy',
+  '12': 'Dek',
+};
+
 export const MONTH_NAMES: { [key: string]: string } = {
   '01': 'Yanvar',
   '02': 'Fevral',
