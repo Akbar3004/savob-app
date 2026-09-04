@@ -1,16 +1,39 @@
-import React, { useState } from 'react';
-import { MonthlyStats, formatUZS, formatUSD, formatCompact } from '../types';
-import { BarChart3, Heart, TrendingUp, ArrowUpRight } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { MonthlyStats, formatUZS, formatUSD, formatCompact, MONTH_ABBR } from '../types';
+import { BarChart3, Heart, TrendingUp, TrendingDown, Wallet, CalendarRange } from 'lucide-react';
 
 interface MonthlyChartProps {
   stats: MonthlyStats[];
   charityPercentage: number;
 }
 
+// Ustun ranglari. "Sof" yashil — pastdagi SOF kartasi bilan bir xil;
+// "Ehson" oltin — EHSON kartasi bilan bir xil. Oq rang ishlatilmaydi,
+// chunki u pastdagi kartalarning hech biriga mos kelmasdi.
+const NET_FILL = 'linear-gradient(180deg, #10b981 0%, #047857 100%)';
+const CHARITY_FILL = 'linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%)';
+
 export const MonthlyChart: React.FC<MonthlyChartProps> = ({ stats, charityPercentage }) => {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
-  if (stats.length === 0) {
+  const activeIdx = hoveredIdx !== null ? Math.min(hoveredIdx, stats.length - 1) : stats.length - 1;
+  const active = stats[activeIdx];
+  const prev = activeIdx > 0 ? stats[activeIdx - 1] : null;
+
+  // Tanlangan oy qaysi yilga tegishli bo'lsa, o'sha yilning jami summasi
+  const year = useMemo(() => {
+    if (!active) return null;
+    const y = active.monthKey.slice(0, 4);
+    const months = stats.filter((s) => s.monthKey.slice(0, 4) === y);
+    return {
+      label: y,
+      uzs: months.reduce((sum, s) => sum + s.totalUZS, 0),
+      usd: months.reduce((sum, s) => sum + s.totalUSD, 0),
+      count: months.length,
+    };
+  }, [stats, active]);
+
+  if (stats.length === 0 || !active || !year) {
     return (
       <div className="card-3d-dark p-8 h-full flex flex-col items-center justify-center min-h-[380px]">
         <div className="w-20 h-20 bg-white/5 rounded-2xl flex items-center justify-center text-indigo-400 mb-5 border border-white/10 float-animation">
@@ -25,151 +48,201 @@ export const MonthlyChart: React.FC<MonthlyChartProps> = ({ stats, charityPercen
   }
 
   const maxTotal = Math.max(...stats.map((s) => s.totalUZS), 1);
-  const activeIdx = hoveredIdx !== null ? hoveredIdx : stats.length - 1;
-  const activeStat = stats[activeIdx];
+
+  // O'tgan oyga nisbatan o'zgarish. Taqqoslanadigan oy nomi yozib qo'yiladi —
+  // oralig'ida bo'sh oy bo'lsa ham foydalanuvchi nimaga nisbatan ekanini biladi.
+  const deltaPct =
+    prev && prev.totalUZS > 0 ? ((active.totalUZS - prev.totalUZS) / prev.totalUZS) * 100 : null;
+  const up = (deltaPct ?? 0) >= 0;
 
   return (
-    <div className="card-3d-dark p-6 flex flex-col justify-between h-full min-h-[380px] text-white">
-      {/* Header */}
-      <div>
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-white/10 text-indigo-300 backdrop-blur-sm border border-white/5">
-              <BarChart3 className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-display font-bold text-base tracking-wide">Oylik tahlil</h3>
-              <p className="text-[11px] text-indigo-300/80">Daromadlar va ehson ulushi</p>
-            </div>
+    <div className="card-3d-dark p-6 flex flex-col h-full min-h-[380px] text-white">
+      {/* ── Sarlavha va legenda ── */}
+      <div className="flex items-center justify-between gap-3 mb-5">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2.5 rounded-xl bg-white/10 text-indigo-300 backdrop-blur-sm border border-white/5 shrink-0">
+            <BarChart3 className="w-5 h-5" />
           </div>
-          <span className="px-3.5 py-1.5 bg-indigo-800/60 text-white rounded-full text-[11px] font-bold border border-indigo-600/30 backdrop-blur-sm">
-            {charityPercentage}% Hayriya
-          </span>
+          <div className="min-w-0">
+            <h3 className="font-display font-bold text-base tracking-wide">Oylik tahlil</h3>
+            <p className="text-[11px] text-indigo-300/80 truncate">Daromadlar va ehson ulushi</p>
+          </div>
         </div>
-
-        {/* Chart Bars */}
-        <div className="relative pt-4 px-1">
-          {/* Grid lines */}
-          <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
-            {[0, 1, 2, 3].map(i => (
-              <div key={i} className="border-b border-white/5 w-full" />
-            ))}
-          </div>
-
-          <div className="flex justify-between items-end gap-2 h-[160px] border-b border-white/10 pb-1 relative z-10">
-            {stats.map((item, idx) => {
-              const totalHeightPercent = (item.totalUZS / maxTotal) * 100;
-              const charityHeightPercent = (item.charityUZS / item.totalUZS) * totalHeightPercent;
-              const netHeightPercent = totalHeightPercent - charityHeightPercent;
-              const isActive = activeIdx === idx;
-
-              return (
-                <div
-                  key={item.monthKey}
-                  className="flex-1 flex flex-col items-center group relative cursor-pointer"
-                  onMouseEnter={() => setHoveredIdx(idx)}
-                  onMouseLeave={() => setHoveredIdx(null)}
-                >
-                  {/* Tooltip */}
-                  <div className={`absolute bottom-full mb-3 z-20 bg-slate-900/95 backdrop-blur-md text-white text-[11px] p-4 rounded-2xl shadow-2xl border border-slate-700/50 pointer-events-none min-w-[180px] transition-all duration-300 ${
-                    hoveredIdx === idx ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-90 invisible'
-                  }`}>
-                    <p className="font-bold text-white border-b border-slate-700 pb-2 mb-2 text-xs">
-                      📅 {item.monthName}
-                    </p>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between gap-6">
-                        <span className="text-slate-400">Jami:</span>
-                        <div className="text-right">
-                          <span className="font-bold block">{formatUZS(item.totalUZS)}</span>
-                          <span className="text-indigo-300 text-[10px]">{formatUSD(item.totalUSD)}</span>
-                        </div>
-                      </div>
-                      <div className="flex justify-between gap-6">
-                        <span className="text-amber-400">Ehson:</span>
-                        <div className="text-right">
-                          <span className="font-bold text-amber-300 block">{formatUZS(item.charityUZS)}</span>
-                          <span className="text-amber-400/70 text-[10px]">{formatUSD(item.charityUSD)}</span>
-                        </div>
-                      </div>
-                      <div className="flex justify-between gap-6">
-                        <span className="text-emerald-400">Sof:</span>
-                        <div className="text-right">
-                          <span className="font-bold text-emerald-300 block">{formatUZS(item.netUZS)}</span>
-                          <span className="text-emerald-400/70 text-[10px]">{formatUSD(item.netUSD)}</span>
-                        </div>
-                      </div>
-                      <div className="flex justify-between gap-6 pt-1 border-t border-slate-700/50">
-                        <span className="text-slate-500">Kirimlar:</span>
-                        <span className="font-bold text-white">{item.transactionCount} ta</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Stacked bar */}
-                  <div className={`w-full max-w-[32px] flex flex-col justify-end h-[130px] rounded-t-lg overflow-hidden transition-all duration-300 bar-animated ${
-                    isActive ? 'ring-2 ring-white/30 ring-offset-1 ring-offset-transparent' : ''
-                  }`} style={{ animationDelay: `${idx * 0.1}s` }}>
-                    <div
-                      style={{ height: `${Math.max(charityHeightPercent, 2)}%` }}
-                      className={`w-full transition-all duration-300 ${isActive ? 'bg-amber-400' : 'bg-amber-500/60'}`}
-                    />
-                    <div
-                      style={{ height: `${Math.max(netHeightPercent, 2)}%` }}
-                      className={`w-full transition-all duration-300 ${isActive ? 'bg-white' : 'bg-white/20'}`}
-                    />
-                  </div>
-
-                  {/* X-axis label */}
-                  <span className={`text-[10px] font-bold mt-2.5 font-display uppercase tracking-wider transition-all ${
-                    isActive ? 'text-white' : 'text-indigo-300/50'
-                  }`}>
-                    {item.monthName.split(' ')[0].slice(0, 3)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+        <div className="flex items-center gap-3.5 text-[10px] font-bold uppercase tracking-wider text-indigo-200/70 shrink-0">
+          <span className="flex items-center gap-1.5">
+            <i className="w-2.5 h-2.5 rounded-sm" style={{ background: NET_FILL }} />
+            Sof
+          </span>
+          <span className="flex items-center gap-1.5">
+            <i className="w-2.5 h-2.5 rounded-sm" style={{ background: CHARITY_FILL }} />
+            Ehson
+          </span>
         </div>
       </div>
 
-      {/* Bottom Summary */}
-      <div className="mt-6 border-t border-white/10 pt-5 space-y-3">
-        <div className="flex items-center justify-between text-[11px] text-indigo-200">
-          <span className="font-bold tracking-wide uppercase flex items-center gap-1.5">
-            <ArrowUpRight className="w-3.5 h-3.5 text-indigo-400" />
-            {activeStat.monthName}
-          </span>
-          <span className="text-indigo-300/60 text-[10px]">
-            {hoveredIdx !== null ? 'Tanlangan oy' : 'Oxirgi oy'}
-          </span>
+      {/* ── Katta raqam (tanlangan oy) + yillik jami ── */}
+      <div className="flex items-stretch gap-4 mb-5">
+        <div className="min-w-0 flex-1">
+          <p className="text-[9.5px] font-black uppercase tracking-[.11em] text-indigo-300/80 mb-1">
+            {active.monthName} · Jami
+          </p>
+          <p className="font-display font-bold text-[38px] leading-none tracking-tight tabular-nums">
+            {formatCompact(active.totalUZS)}
+          </p>
+          <p className="text-[11.5px] font-semibold text-indigo-300/85 mt-1.5 tabular-nums">
+            {formatUSD(active.totalUSD)} · {active.transactionCount} ta kirim
+          </p>
+          {deltaPct !== null && prev && (
+            <span
+              className="inline-flex items-center gap-1 mt-2.5 text-[10.5px] font-bold px-2.5 py-1 rounded-full"
+              style={{
+                background: up ? 'rgba(16,185,129,.16)' : 'rgba(244,63,94,.16)',
+                color: up ? '#34d399' : '#fb7185',
+              }}
+            >
+              {up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+              {Math.abs(deltaPct).toFixed(0)}% · {prev.monthName.split(' ')[0]}ga nisbatan
+            </span>
+          )}
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          <div className="bg-white/[0.04] p-3 rounded-xl border border-white/5">
-            <div className="flex items-center gap-1 mb-1">
-              <TrendingUp className="w-3 h-3 text-indigo-400" />
-              <p className="text-[9px] text-indigo-300 uppercase font-bold tracking-wider">Jami</p>
-            </div>
-            <p className="text-sm font-black font-display text-white">{formatCompact(activeStat.totalUZS)}</p>
-            <p className="text-[10px] font-semibold text-indigo-300">{formatUSD(activeStat.totalUSD)}</p>
+        <div className="w-px bg-white/10 shrink-0" />
+
+        <div className="min-w-0 shrink-0 text-right">
+          <p className="text-[9.5px] font-black uppercase tracking-[.11em] text-indigo-300/80 mb-1 flex items-center justify-end gap-1">
+            <CalendarRange className="w-3 h-3" />
+            {year.label} yil · Jami
+          </p>
+          <p className="font-display font-bold text-[25px] leading-none tracking-tight text-indigo-100 tabular-nums">
+            {formatCompact(year.uzs)}
+          </p>
+          <p className="text-[11px] font-semibold text-indigo-300/70 mt-1.5 tabular-nums">
+            {formatUSD(year.usd)}
+          </p>
+          <p className="text-[10px] font-semibold text-indigo-300/50 mt-0.5">
+            {year.count} oy ma'lumoti
+          </p>
+        </div>
+      </div>
+
+      {/* ── Ustunli grafik ── */}
+      <div className="flex-1 min-h-[150px] grid grid-cols-[42px_1fr] gap-2.5">
+        {/* O'lchov raqamlari */}
+        <div className="flex flex-col justify-between items-end pb-5 text-[9.5px] font-bold text-indigo-300/55 tabular-nums">
+          <span>{formatCompact(maxTotal)}</span>
+          <span>{formatCompact(maxTotal / 2)}</span>
+          <span>0</span>
+        </div>
+
+        <div className="relative flex items-stretch gap-2.5 pb-5">
+          {/* Xira gorizontal chiziqlar */}
+          <div className="absolute inset-x-0 top-0 bottom-5 flex flex-col justify-between pointer-events-none">
+            <div className="border-t border-dashed border-white/[0.07]" />
+            <div className="border-t border-dashed border-white/[0.07]" />
+            <div className="border-t border-dashed border-white/[0.07]" />
           </div>
-          <div className="bg-white/[0.04] p-3 rounded-xl border border-white/5">
-            <div className="flex items-center gap-1 mb-1">
-              <Heart className="w-3 h-3 text-amber-400 fill-current" />
-              <p className="text-[9px] text-amber-300 uppercase font-bold tracking-wider">Ehson</p>
-            </div>
-            <p className="text-sm font-black font-display text-amber-400">{formatCompact(activeStat.charityUZS)}</p>
-            <p className="text-[10px] font-semibold text-amber-300/70">{formatUSD(activeStat.charityUSD)}</p>
-          </div>
-          <div className="bg-white/[0.04] p-3 rounded-xl border border-white/5">
-            <div className="flex items-center gap-1 mb-1">
-              <TrendingUp className="w-3 h-3 text-emerald-400" />
-              <p className="text-[9px] text-emerald-300 uppercase font-bold tracking-wider">Sof</p>
-            </div>
-            <p className="text-sm font-black font-display text-emerald-400">{formatCompact(activeStat.netUZS)}</p>
-            <p className="text-[10px] font-semibold text-emerald-300/70">{formatUSD(activeStat.netUSD)}</p>
-          </div>
+
+          {stats.map((item, idx) => {
+            const barPct = (item.totalUZS / maxTotal) * 100;
+            // Ehson ulushi ustun ICHIDAGI foiz sifatida
+            const charityOfBar =
+              item.totalUZS > 0 ? (item.charityUZS / item.totalUZS) * 100 : 0;
+            const isActive = activeIdx === idx;
+
+            return (
+              <div
+                key={item.monthKey}
+                className="relative flex-1 flex flex-col justify-end cursor-pointer group"
+                onMouseEnter={() => setHoveredIdx(idx)}
+                onMouseLeave={() => setHoveredIdx(null)}
+                onClick={() => setHoveredIdx(idx)}
+                title={`${item.monthName} — ${formatUZS(item.totalUZS)} (ehson ${formatUZS(item.charityUZS)})`}
+              >
+                {/* Ustun orqasidagi xira yo'lak */}
+                <div
+                  className={`absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[58px] rounded-xl transition-colors ${
+                    isActive ? 'bg-white/[0.075]' : 'bg-white/[0.035] group-hover:bg-white/[0.06]'
+                  }`}
+                />
+
+                {/* Tanlangan ustun tepasidagi summa */}
+                <span
+                  className={`absolute inset-x-0 text-center font-display font-bold text-[11px] tabular-nums transition-opacity ${
+                    isActive ? 'opacity-100' : 'opacity-0'
+                  }`}
+                  style={{ bottom: `calc(${barPct}% + 4px)` }}
+                >
+                  {formatCompact(item.totalUZS)}
+                </span>
+
+                {/* Ustun: pastda sof, tepada ehson, orasida 2px tirqish */}
+                <div
+                  className={`relative self-center w-full max-w-[58px] flex flex-col justify-end gap-0.5 px-[7px] pb-1.5 bar-animated transition-[filter] ${
+                    isActive ? '' : 'saturate-[.55] brightness-[.82]'
+                  }`}
+                  style={{ height: `${barPct}%`, animationDelay: `${idx * 0.08}s` }}
+                >
+                  {item.charityUZS > 0 && (
+                    <div
+                      className="w-full rounded shrink-0"
+                      style={{
+                        height: `${charityOfBar}%`,
+                        minHeight: 3,
+                        background: CHARITY_FILL,
+                      }}
+                    />
+                  )}
+                  <div className="w-full flex-1 rounded" style={{ background: NET_FILL }} />
+                </div>
+
+                {/* Oy qisqartmasi */}
+                <span
+                  className={`absolute inset-x-0 -bottom-5 text-center text-[10px] font-bold font-display uppercase tracking-wider transition-colors ${
+                    isActive ? 'text-white' : 'text-indigo-300/50'
+                  }`}
+                >
+                  {MONTH_ABBR[item.monthKey.slice(5, 7)] || item.monthName.slice(0, 3)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Tanlangan oyning taqsimoti ── */}
+      <div className="grid grid-cols-3 gap-2 mt-5 pt-5 border-t border-white/10">
+        <div className="bg-white/[0.04] p-3 rounded-xl border border-white/5">
+          <p className="text-[9px] text-indigo-300 uppercase font-bold tracking-wider mb-1 flex items-center gap-1">
+            <Wallet className="w-3 h-3" /> Jami
+          </p>
+          <p className="text-sm font-black font-display text-white tabular-nums">
+            {formatCompact(active.totalUZS)}
+          </p>
+          <p className="text-[10px] font-semibold text-indigo-300 tabular-nums">
+            {formatUSD(active.totalUSD)}
+          </p>
+        </div>
+        <div className="bg-white/[0.04] p-3 rounded-xl border border-white/5">
+          <p className="text-[9px] text-amber-300 uppercase font-bold tracking-wider mb-1 flex items-center gap-1">
+            <Heart className="w-3 h-3 fill-current" /> Ehson ({charityPercentage}%)
+          </p>
+          <p className="text-sm font-black font-display text-amber-400 tabular-nums">
+            {formatCompact(active.charityUZS)}
+          </p>
+          <p className="text-[10px] font-semibold text-amber-300/70 tabular-nums">
+            {formatUSD(active.charityUSD)}
+          </p>
+        </div>
+        <div className="bg-white/[0.04] p-3 rounded-xl border border-white/5">
+          <p className="text-[9px] text-emerald-300 uppercase font-bold tracking-wider mb-1 flex items-center gap-1">
+            <TrendingUp className="w-3 h-3" /> Sof
+          </p>
+          <p className="text-sm font-black font-display text-emerald-400 tabular-nums">
+            {formatCompact(active.netUZS)}
+          </p>
+          <p className="text-[10px] font-semibold text-emerald-300/70 tabular-nums">
+            {formatUSD(active.netUSD)}
+          </p>
         </div>
       </div>
     </div>
