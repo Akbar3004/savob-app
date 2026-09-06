@@ -840,16 +840,70 @@ export default function App() {
   }, [scopedTransactions, channels, charityPercentage, exchangeRate, payouts, factors]);
 
   // Export/Import backup
-  const handleExportData = () => {
-    const exportData = { transactions, exchangeRate, charityPercentage, incomeGoals, yearlyGoals, channels, payouts };
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `savob_backup_${new Date().toISOString().split('T')[0]}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-    showToast('Zaxira fayli yuklab olindi.', 'success');
+  const handleExportData = async () => {
+    // selfChannel ham qo'shiladi — ilgari u zaxiraga tushmasdi va fayldan
+    // tiklaganda shaxsiy kanalning nomi bilan rangi yo'qolib ketardi.
+    const exportData = {
+      transactions,
+      exchangeRate,
+      charityPercentage,
+      incomeGoals,
+      yearlyGoals,
+      channels,
+      selfChannel,
+      payouts,
+    };
+    const json = JSON.stringify(exportData, null, 2);
+    const filename = `savob_backup_${new Date().toISOString().split('T')[0]}.json`;
+
+    // 1) Telefonda: tizimning "ulashish" oynasi — fayl "Fayllar"ga saqlanadi
+    //    yoki Telegramga yuboriladi. Ko'p mobil brauzerlarda <a download>
+    //    jimgina ishlamaydi, shuning uchun bu birinchi o'rinda turadi.
+    try {
+      const file = new File([json], filename, { type: 'application/json' });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Savob App zaxira nusxasi' });
+        showToast('Zaxira fayli tayyor.', 'success');
+        return;
+      }
+    } catch (err) {
+      // Foydalanuvchi o'zi bekor qilgan bo'lsa — bu xato emas, jim chiqamiz
+      if ((err as Error)?.name === 'AbortError') return;
+      // Boshqa xatoda pastdagi oddiy yuklab olishga o'tamiz
+    }
+
+    // 2) Kompyuterda: blob havolasi orqali yuklab olish.
+    //    Ilgari "data:" URI ishlatilardi — u katta fayllarda va mobil
+    //    brauzerlarda hech qanday xabarsiz ishlamay qo'yardi.
+    const a = document.createElement('a');
+    if (!('download' in a)) {
+      // 3) Oxirgi chora: fayl saqlab bo'lmasa, matnni nusxaga olamiz
+      try {
+        await navigator.clipboard.writeText(json);
+        showToast("Fayl saqlanmadi — ma'lumot nusxaga olindi, matn faylga qo'ying.", 'info');
+      } catch {
+        showToast("Bu brauzer faylni saqlay olmadi. Boshqa brauzerda urinib ko'ring.", 'error');
+      }
+      return;
+    }
+
+    try {
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      // Havolani darhol o'chirsak, ayrim brauzerlar yuklashni bekor qiladi
+      setTimeout(() => {
+        a.remove();
+        URL.revokeObjectURL(url);
+      }, 30000);
+      showToast('Zaxira fayli yuklab olindi.', 'success');
+    } catch {
+      showToast("Faylni saqlab bo'lmadi. Brauzerning yuklashlar ruxsatini tekshiring.", 'error');
+    }
   };
 
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -876,7 +930,16 @@ export default function App() {
             if (parsed.payouts && typeof parsed.payouts === 'object') {
               setPayouts(parsed.payouts);
             }
-            if (binId && (parsed.incomeGoals || parsed.yearlyGoals || parsed.channels || parsed.payouts)) {
+            // Shaxsiy kanalning nomi va rangi ham tiklanadi
+            const importedSelf =
+              parsed.selfChannel && typeof parsed.selfChannel === 'object'
+                ? (parsed.selfChannel as SelfChannel)
+                : undefined;
+            if (importedSelf) setSelfChannel(importedSelf);
+            if (
+              binId &&
+              (parsed.incomeGoals || parsed.yearlyGoals || parsed.channels || parsed.payouts || importedSelf)
+            ) {
               performSync(
                 parsed.transactions,
                 charityPercentage,
@@ -886,7 +949,8 @@ export default function App() {
                 parsed.yearlyGoals || yearlyGoals,
                 deletedIdsRef.current,
                 Array.isArray(parsed.channels) ? parsed.channels : channels,
-                parsed.payouts && typeof parsed.payouts === 'object' ? parsed.payouts : payouts
+                parsed.payouts && typeof parsed.payouts === 'object' ? parsed.payouts : payouts,
+                importedSelf || selfChannel
               );
             }
             showToast("Ma'lumotlar fayldan tiklandi!", 'success');
