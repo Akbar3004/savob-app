@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Calendar, Wallet, Heart, TrendingUp, BarChart3, Percent, Check, Download } from 'lucide-react';
 import { Transaction, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, txUZS, txUSD, rateForMonth } from '../types';
 import { jsPDF } from 'jspdf';
+import { appTodayISO, appWeekStartISO, appMonthKey, appMonthKeyOffset, realTodayISO } from '../appDate';
 
 interface StatsModalProps {
   isOpen: boolean;
@@ -31,21 +32,12 @@ export const StatsModal: React.FC<StatsModalProps> = ({
   const toUSD = (t: Transaction) => txUSD(t, payouts, exchangeRate, factors);
 
   const dateFilteredTransactions = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    
-    // Get start of week
-    const now = new Date();
-    const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-    const startOfWeekStr = new Date(now.setDate(diff)).toISOString().split('T')[0];
-
-    // Get current month prefix
-    const currentMonthPrefix = new Date().toISOString().slice(0, 7); // YYYY-MM
-    
-    // Get previous month prefix
-    const prevMonthDate = new Date();
-    prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
-    const prevMonthPrefix = prevMonthDate.toISOString().slice(0, 7);
+    // Oraliqlar ilova "bugun"iga tayanadi (haqiqiy kundan 2 kun orqada),
+    // chunki YouTube daromadi shuncha kech ko'rinadi.
+    const todayStr = appTodayISO();
+    const startOfWeekStr = appWeekStartISO();
+    const currentMonthPrefix = appMonthKey();
+    const prevMonthPrefix = appMonthKeyOffset(1);
 
     return transactions.filter((t) => {
       if (rangeType === 'today') {
@@ -191,7 +183,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({
     }
     doc.setTextColor(129, 140, 248);
     doc.setFontSize(8);
-    doc.text(`Tayyorlandi: ${new Date().toISOString().split('T')[0]}`, W - M, rangeType === 'custom' ? 31 : 25, { align: 'right' });
+    doc.text(`Tayyorlandi: ${realTodayISO()}`, W - M, rangeType === 'custom' ? 31 : 25, { align: 'right' });
 
     // ===== Min/Max/Avg strip (topmost data block) =====
     const amountsUZS = dateFilteredTransactions.map(toUZS);
@@ -422,7 +414,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({
     doc.setFont('Helvetica', 'normal');
     doc.text('savob-app.vercel.app — SAVOB APP orqali avtomatik tayyorlandi', W / 2, 290, { align: 'center' });
 
-    doc.save(`Savob_Statistika_${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save(`Savob_Statistika_${realTodayISO()}.pdf`);
   };
 
   if (!isOpen) return null;

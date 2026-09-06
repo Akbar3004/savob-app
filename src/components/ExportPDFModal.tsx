@@ -4,6 +4,7 @@ import { X, FileText, Calendar, CheckSquare, Square, Download } from 'lucide-rea
 import { Transaction, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, MONTH_NAMES, txUZS, txUSD } from '../types';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { appTodayISO, appWeekStartISO, appMonthKey, appMonthKeyOffset, realTodayISO } from '../appDate';
 
 interface ExportPDFModalProps {
   isOpen: boolean;
@@ -48,18 +49,12 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
   };
 
   const filteredTransactions = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    
-    const now = new Date();
-    const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-    const startOfWeekStr = new Date(now.setDate(diff)).toISOString().split('T')[0];
-
-    const currentMonthPrefix = new Date().toISOString().slice(0, 7);
-    
-    const prevMonthDate = new Date();
-    prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
-    const prevMonthPrefix = prevMonthDate.toISOString().slice(0, 7);
+    // Oraliqlar ilova "bugun"iga tayanadi (haqiqiy kundan 2 kun orqada),
+    // chunki YouTube daromadi shuncha kech ko'rinadi.
+    const todayStr = appTodayISO();
+    const startOfWeekStr = appWeekStartISO();
+    const currentMonthPrefix = appMonthKey();
+    const prevMonthPrefix = appMonthKeyOffset(1);
 
     return transactions.filter((t) => {
       if (rangeType === 'today') {
@@ -100,7 +95,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
     doc.setFontSize(10);
     doc.setTextColor(100, 116, 139);
     let rangeText = '';
-    if (rangeType === 'today') rangeText = `Bugungi hisobot (${new Date().toISOString().split('T')[0]})`;
+    if (rangeType === 'today') rangeText = `Bugungi hisobot (${appTodayISO()})`;
     else if (rangeType === 'week') rangeText = 'Haftalik hisobot';
     else if (rangeType === 'month') rangeText = 'Joriy oylik hisobot';
     else if (rangeType === 'prev_month') rangeText = 'O\'tgan oylik hisobot';
@@ -178,7 +173,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
     });
 
     // Save PDF
-    doc.save(`Savob_Jadval_Hisoboti_${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save(`Savob_Jadval_Hisoboti_${realTodayISO()}.pdf`);
     onClose();
   };
 

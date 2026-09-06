@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Gauge, ArrowUpCircle, ArrowDownCircle, Equal, CalendarDays, CalendarRange } from 'lucide-react';
 import { Transaction, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, txUZS, txUSD } from '../types';
+import { appMonthKey, appTodayISO } from '../appDate';
 
 interface ExtremesModalProps {
   isOpen: boolean;
@@ -47,8 +48,8 @@ export const ExtremesModal: React.FC<ExtremesModalProps> = ({
   };
 
   const { monthStats, yearStats, monthLabel, yearLabel } = useMemo(() => {
-    const monthPrefix = new Date().toISOString().slice(0, 7); // YYYY-MM
-    const yearPrefix = new Date().toISOString().slice(0, 4); // YYYY
+    const monthPrefix = appMonthKey(); // YYYY-MM
+    const yearPrefix = appTodayISO().slice(0, 4); // YYYY
     return {
       monthStats: analyze(transactions.filter((t) => t.date.startsWith(monthPrefix))),
       yearStats: analyze(transactions.filter((t) => t.date.startsWith(yearPrefix))),

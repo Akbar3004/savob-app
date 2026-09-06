@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Transaction, Channel, SelfChannel, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, hasCharityTx, CHANNEL_MODE_LABELS, SELF_CHANNEL_ID, txUZS, txUSD, isSettled, channelInfo, txDisplayName, channelKeyOf } from '../types';
 import { Trash2, Edit2, Search, Filter, Calendar, DollarSign, Banknote, ArrowUpRight, ArrowDownRight, Youtube, User } from 'lucide-react';
+import { appMonthKey } from '../appDate';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -27,10 +28,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 }) => {
   // Har bir yozuv uchun kanal ma'lumoti (shaxsiy kanal ham o'z nomi/rangi bilan)
   const channelFor = (t: Transaction) => channelInfo(t.channelId, channels, selfChannel);
-  const currentMonth = useMemo(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  }, []);
+  const currentMonth = useMemo(() => appMonthKey(), []);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');

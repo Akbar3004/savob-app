@@ -45,6 +45,7 @@ import { ChannelBreakdownCard } from './components/ChannelBreakdownCard';
 import { PayoutsModal } from './components/PayoutsModal';
 import { AnalyticsModal } from './components/AnalyticsModal';
 import { saveUserData, fetchUserData, mergeUserData, hashPassword, UserData } from './services/db';
+import { appMonthKey, appMonthKeyOffset, realTodayISO } from './appDate';
 
 export default function App() {
   const [binId, setBinId] = useState<string | null>(null);
@@ -269,8 +270,8 @@ export default function App() {
 
   // Ilova ochilganda: sessiyani tiklash + barqaror bulut bilan sinxronlash
   useEffect(() => {
-    const currentMonthStr = new Date().toISOString().slice(0, 7);
-    setSelectedPeriod(currentMonthStr);
+    // Ilova "bugun"i — haqiqiy kundan 2 kun orqada (YouTube kechikishi)
+    setSelectedPeriod(appMonthKey());
 
     const savedPassword = localStorage.getItem('savob_password');
     const legacyBinId = localStorage.getItem('savob_bin_id');
@@ -583,12 +584,8 @@ export default function App() {
 
   // 🆕 Start New Month
   const handleStartNewMonth = () => {
-    const currentMonthPrefix = new Date().toISOString().slice(0, 7); // YYYY-MM
-    
-    // Find previous month before the current calendar month
-    const prevMonthDate = new Date();
-    prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
-    const prevMonthPrefix = prevMonthDate.toISOString().slice(0, 7);
+    const currentMonthPrefix = appMonthKey();
+    const prevMonthPrefix = appMonthKeyOffset(1);
 
     // Switch selection to current month
     setSelectedPeriod(currentMonthPrefix);
@@ -667,7 +664,7 @@ export default function App() {
   // To'lov kursi kutilayotgan o'tgan oylar soni (joriy oy hisobga olinmaydi —
   // uning puli hali kelmaydi, shuning uchun bu doim tursa shovqin bo'lardi).
   const pendingPayoutMonths = useMemo(() => {
-    const thisMonth = new Date().toISOString().slice(0, 7);
+    const thisMonth = appMonthKey();
     const withUsd = new Set<string>(
       transactions.filter((t) => t.currency === 'USD').map((t) => t.date.slice(0, 7))
     );
@@ -780,7 +777,7 @@ export default function App() {
   const availablePeriods = useMemo(() => {
     const list = Array.from(new Set<string>(transactions.map(t => t.date.slice(0, 7))));
     // Make sure current calendar month is always selectable even if empty
-    const currentMonthStr = new Date().toISOString().slice(0, 7);
+    const currentMonthStr = appMonthKey();
     if (!list.includes(currentMonthStr)) {
       list.push(currentMonthStr);
     }
@@ -854,7 +851,8 @@ export default function App() {
       payouts,
     };
     const json = JSON.stringify(exportData, null, 2);
-    const filename = `savob_backup_${new Date().toISOString().split('T')[0]}.json`;
+    // Fayl nomida HAQIQIY kun — zaxira qachon olingani
+    const filename = `savob_backup_${realTodayISO()}.json`;
 
     // 1) Telefonda: tizimning "ulashish" oynasi — fayl "Fayllar"ga saqlanadi
     //    yoki Telegramga yuboriladi. Ko'p mobil brauzerlarda <a download>
@@ -1198,7 +1196,7 @@ export default function App() {
         {/* Oylik daromad maqsadi kartasi */}
         {(() => {
           const goalMonthKey =
-            selectedPeriod === 'all' ? new Date().toISOString().slice(0, 7) : selectedPeriod;
+            selectedPeriod === 'all' ? appMonthKey() : selectedPeriod;
           return (
             <>
             <IncomeGoalCard
