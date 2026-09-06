@@ -21,6 +21,7 @@ import {
   type DailyTotals,
   type GoalLevel,
 } from '../services/forecast';
+import { appMonthKey, appDayOfMonth } from '../appDate';
 
 interface IncomeForecastCardProps {
   transactions: Transaction[];
@@ -66,7 +67,7 @@ export const IncomeForecastCard: React.FC<IncomeForecastCardProps> = ({
   currentGoal,
   onSetGoal,
 }) => {
-  const todayMonthKey = new Date().toISOString().slice(0, 7);
+  const todayMonthKey = appMonthKey();
   const isCurrentMonth = monthKey === todayMonthKey;
 
   // Taxmin maqsad bilan BIR XIL asosda hisoblanadi: faqat "meniki" kanallar,
@@ -85,7 +86,7 @@ export const IncomeForecastCard: React.FC<IncomeForecastCardProps> = ({
 
   const forecast = useMemo(() => {
     if (!isCurrentMonth) return null;
-    return computeForecast(daily, monthKey, new Date().getDate());
+    return computeForecast(daily, monthKey, appDayOfMonth());
   }, [daily, monthKey, isCurrentMonth]);
 
   const pastTotals = useMemo(() => {
@@ -105,7 +106,7 @@ export const IncomeForecastCard: React.FC<IncomeForecastCardProps> = ({
 
   const monthRate = rateForMonth(monthKey, payouts, exchangeRate);
   const dim = daysInMonth(monthKey);
-  const day = new Date().getDate();
+  const day = appDayOfMonth();
   const conf = CONF_META[forecast.confidence];
 
   // Oraliqni chiziqda ko'rsatish uchun

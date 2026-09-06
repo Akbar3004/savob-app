@@ -13,6 +13,7 @@ import {
   Flame,
 } from 'lucide-react';
 import { Transaction, Channel, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, isOwnedTx, hasCharityTx, txUZS, rateForMonth } from '../types';
+import { appMonthKey, appToday } from '../appDate';
 
 interface IncomeGoalCardProps {
   transactions: Transaction[];
@@ -118,11 +119,11 @@ export const IncomeGoalCard: React.FC<IncomeGoalCardProps> = ({
   const isYearReached = yearlyGoal > 0 && netThisYearUZS >= yearlyGoal;
 
   // --- Tempo (kunlik / haftalik sur'at) — faqat joriy oy uchun ---
-  const todayMonthKey = new Date().toISOString().slice(0, 7);
+  const todayMonthKey = appMonthKey();
   const isCurrentMonth = monthKey === todayMonthKey;
   const tempo = useMemo(() => {
     if (!isCurrentMonth || goal <= 0 || isReached) return null;
-    const now = new Date();
+    const now = appToday();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const daysRemainingRaw = daysInMonth - now.getDate() + 1; // bugungi kun ham hisobga olinadi
     const daysRemaining = Math.max(daysRemainingRaw, 1);

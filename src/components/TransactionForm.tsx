@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Check, Edit2, X, DollarSign, Banknote, User, Youtube } from 'lucide-react';
 import { CATEGORIES, Transaction, Channel, SelfChannel, Payouts, PayoutFactors, SELF_CHANNEL_ID, formatUZS, formatUSD, rateForMonth, channelInfo, channelMode, CHANNEL_MODE_SHORT } from '../types';
+import { appTodayISO, DATA_LAG_DAYS } from '../appDate';
 
 interface TransactionFormProps {
   onAdd: (transaction: Omit<Transaction, 'id' | 'charityPercentage'>) => void;
@@ -44,11 +45,9 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
   useEffect(() => {
     if (!editingTransaction) {
-      const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
-      setDate(`${yyyy}-${mm}-${dd}`);
+      // YouTube daromadi ~2 kun kechikadi, shuning uchun forma haqiqiy
+      // kunni emas, ilovaning "bugun"ini oldindan qo'yadi
+      setDate(appTodayISO());
     }
   }, [editingTransaction]);
 
@@ -377,6 +376,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               onChange={(e) => setDate(e.target.value)}
               className="w-full text-xs font-semibold px-3 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-slate-700"
             />
+            {!editingTransaction && date === appTodayISO() && (
+              <p className="text-[9.5px] font-semibold text-slate-400 mt-1.5 leading-snug">
+                YouTube {DATA_LAG_DAYS} kun kechikadi — sana shunga moslandi.
+                Kerak bo'lsa o'zgartiring.
+              </p>
+            )}
           </div>
         </div>
 

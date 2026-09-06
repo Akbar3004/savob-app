@@ -35,6 +35,7 @@ import {
   type DayPoint,
   type MonthPoint,
 } from '../services/analytics';
+import { appMonthKey } from '../appDate';
 
 interface AnalyticsModalProps {
   isOpen: boolean;
@@ -80,7 +81,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
 }) => {
   const [tab, setTab] = useState<Tab>('season');
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = appMonthKey();
 
   // Barcha hisoblar bitta manbadan: kunlik, kanal kesimidagi so'm summalari
   const points: DayPoint[] = useMemo(
