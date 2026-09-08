@@ -1,15 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { KeyRound, ShieldAlert, CheckCircle, RefreshCw, Eye, EyeOff } from 'lucide-react';
-import { hashPassword, checkPasswordExists, registerUser, loadUserData } from '../services/db';
-import { Transaction } from '../types';
+import { hashPassword, probeAccount, registerUser, loadUserData, type UserData } from '../services/db';
+import { readCache } from '../services/localCache';
 
 interface AuthModalProps {
-  onSuccess: (
-    binId: string,
-    data: { transactions: Transaction[]; charityPercentage: number; exchangeRate: number },
-    passwordPlain: string
-  ) => void;
+  onSuccess: (binId: string, data: UserData, passwordPlain: string) => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
@@ -20,11 +16,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  // Server tomonida muammo aniqlanganda diagnostika havolasini ko'rsatamiz
+  const [offline, setOffline] = useState(false);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setOffline(false);
 
     if (password.length < 4) {
       setError("Parol kamida 4 ta belgidan iborat bo'lishi kerak.");
@@ -42,29 +41,70 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
       const hashed = await hashPassword(password);
 
       if (activeTab === 'login') {
-        const binId = await checkPasswordExists(hashed);
-        if (!binId) {
-          setError("Ushbu parol ro'yxatdan o'tmagan. Avval ro'yxatdan o'ting.");
+        const probe = await probeAccount(hashed);
+
+        // Server ishlamayapti — parol haqida hech narsa deyish mumkin emas.
+        // Qurilmada nusxa bo'lsa, oflayn kiritamiz: ilova baribir ishlaydi
+        // va o'zgarishlar aloqa tiklanganda avtomatik yuboriladi.
+        if (probe === 'error') {
+          const cached = readCache(hashed);
+          if (cached) {
+            setOffline(true);
+            setSuccess(
+              "Serverga ulanib bo'lmadi — shu qurilmadagi nusxadan kirildi. " +
+                "O'zgarishlaringiz aloqa tiklanganda avtomatik yuboriladi."
+            );
+            setTimeout(() => onSuccess(hashed, cached, password), 1400);
+            return;
+          }
+          setOffline(true);
+          setError(
+            "Serverga ulanib bo'lmadi. Parolingiz to'g'ri bo'lishi mumkin — " +
+              "bu server tomonidagi muammo. Internetni tekshirib, qayta urinib ko'ring."
+          );
           setLoading(false);
           return;
         }
 
-        const data = await loadUserData(binId);
+        if (probe === 'notfound') {
+          setError("Ushbu parol ro'yxatdan o'tmagan. Avval «Yangi hisob» bo'limidan ro'yxatdan o'ting.");
+          setLoading(false);
+          return;
+        }
+
+        const data = await loadUserData(hashed);
         if (!data) {
-          setError("Ma'lumotlarni yuklab olishda xatolik yuz berdi.");
+          // Hisob bor, lekin o'qib bo'lmadi — mahalliy nusxa bo'lsa o'shani beramiz
+          const cached = readCache(hashed);
+          if (cached) {
+            setOffline(true);
+            setSuccess("Ma'lumot serverdan olinmadi — qurilmadagi nusxadan kirildi.");
+            setTimeout(() => onSuccess(hashed, cached, password), 1400);
+            return;
+          }
+          setError("Ma'lumotlarni yuklab olishda xatolik yuz berdi. Qayta urinib ko'ring.");
           setLoading(false);
           return;
         }
 
         setSuccess("Tizimga muvaffaqiyatli kirildi! Yuklanmoqda...");
         setTimeout(() => {
-          onSuccess(binId, data, password);
+          onSuccess(hashed, data, password);
         }, 1000);
       } else {
         // Register
-        const binIdExists = await checkPasswordExists(hashed);
-        if (binIdExists) {
+        const probe = await probeAccount(hashed);
+        if (probe === 'ok') {
           setError("Ushbu parol allaqachon band. Iltimos, boshqa parol tanlang.");
+          setLoading(false);
+          return;
+        }
+        if (probe === 'error') {
+          setOffline(true);
+          setError(
+            "Serverga ulanib bo'lmadi, shuning uchun yangi hisob yaratilmadi. " +
+              "Aloqa tiklangach qayta urinib ko'ring."
+          );
           setLoading(false);
           return;
         }
@@ -90,7 +130,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
       }
     } catch (err) {
       console.error(err);
-      setError("Server bilan aloqada xatolik yuz berdi.");
+      setOffline(true);
+      setError(
+        "Server bilan aloqada xatolik yuz berdi. Bu parolingiz noto'g'ri degani EMAS."
+      );
     } finally {
       setLoading(false);
     }
@@ -209,7 +252,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
                 className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-100 rounded-xl text-[11px] font-semibold text-rose-500 leading-normal"
               >
                 <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{error}</span>
+                <span>
+                  {error}
+                  {offline && (
+                    <>
+                      {' '}
+                      <a
+                        href="/api/health"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline font-bold hover:text-rose-700"
+                      >
+                        Server holatini tekshirish
+                      </a>
+                    </>
+                  )}
+                </span>
               </motion.div>
             )}
 
