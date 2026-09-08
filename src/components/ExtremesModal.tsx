@@ -1,13 +1,15 @@
 import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Gauge, ArrowUpCircle, ArrowDownCircle, Equal, CalendarDays, CalendarRange } from 'lucide-react';
-import { Transaction, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, txUZS, txUSD } from '../types';
+import { Transaction, Channel, SelfChannel, Payouts, PayoutFactors, formatUZS, formatUSD, txUZS, txUSD, channelInfo } from '../types';
 import { appMonthKey, appTodayISO } from '../appDate';
 
 interface ExtremesModalProps {
   isOpen: boolean;
   onClose: () => void;
   transactions: Transaction[];
+  channels: Channel[];
+  selfChannel: SelfChannel | undefined;
   exchangeRate: number;
   payouts: Payouts;
   factors: PayoutFactors;
@@ -25,6 +27,8 @@ export const ExtremesModal: React.FC<ExtremesModalProps> = ({
   isOpen,
   onClose,
   transactions,
+  channels,
+  selfChannel,
   exchangeRate,
   payouts,
   factors,
@@ -58,8 +62,8 @@ export const ExtremesModal: React.FC<ExtremesModalProps> = ({
     };
   }, [transactions, exchangeRate]);
 
-  const getCatLabel = (catId: string) =>
-    CATEGORIES.find((c) => c.id === catId)?.label || 'Boshqa';
+  /** Yozuv qaysi kanaldan — kategoriya o'rniga endi shu ko'rsatiladi. */
+  const chanName = (t: Transaction) => channelInfo(t.channelId, channels, selfChannel).name;
 
   if (!isOpen) return null;
 
@@ -113,7 +117,7 @@ export const ExtremesModal: React.FC<ExtremesModalProps> = ({
             'Eng katta kirim',
             toUZS(data.maxTx),
             toUSD(data.maxTx),
-            `${data.maxTx.date} · ${getCatLabel(data.maxTx.category)}`,
+            `${data.maxTx.date} · ${chanName(data.maxTx)}`,
             { bg: 'bg-emerald-50/60 border-emerald-100', label: 'text-emerald-600', value: 'text-emerald-700', sub: 'text-emerald-500/70' }
           )}
           {renderStatRow(
@@ -121,7 +125,7 @@ export const ExtremesModal: React.FC<ExtremesModalProps> = ({
             'Eng kichik kirim',
             toUZS(data.minTx),
             toUSD(data.minTx),
-            `${data.minTx.date} · ${getCatLabel(data.minTx.category)}`,
+            `${data.minTx.date} · ${chanName(data.minTx)}`,
             { bg: 'bg-rose-50/60 border-rose-100', label: 'text-rose-600', value: 'text-rose-700', sub: 'text-rose-400' }
           )}
           {renderStatRow(

@@ -397,14 +397,6 @@ export interface MonthlyStats {
   transactionCount: number;
 }
 
-export const CATEGORIES = [
-  { id: 'oylik', label: 'Oylik ish haqi', icon: '💼', color: '#6366f1' },
-  { id: 'biznes', label: 'Tadbirkorlik / Biznes', icon: '🏪', color: '#3b82f6' },
-  { id: 'frilans', label: 'Frilans / Xizmatlar', icon: '💻', color: '#8b5cf6' },
-  { id: 'social_media', label: 'Ijtimoiy tarmoq', icon: '🌐', color: '#ec4899' },
-  { id: 'hadya', label: 'Hadya / Sovg\'a', icon: '🎁', color: '#f59e0b' },
-  { id: 'boshqa', label: 'Boshqa tushum', icon: '📦', color: '#6b7280' },
-];
 
 export function formatUZS(amount: number): string {
   return Math.round(amount).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + " so'm";

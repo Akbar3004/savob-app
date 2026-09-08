@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, FileText, Calendar, CheckSquare, Square, Download } from 'lucide-react';
-import { Transaction, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, MONTH_NAMES, txUZS, txUSD } from '../types';
+import { Transaction, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, txUZS, txUSD } from '../types';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { appTodayISO, appWeekStartISO, appMonthKey, appMonthKeyOffset, realTodayISO } from '../appDate';
@@ -103,7 +103,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
     doc.text(rangeText, w / 2, 26, { align: 'center' });
 
     // Table setup
-    const tableHeaders = [['#', 'Sana', 'Kategoriya', 'Izoh', 'Daromad (so\'m)', 'Daromad ($)', `Ehson UZS`, `Sof UZS` ]];
+    const tableHeaders = [['#', 'Sana', 'Kanal', 'Daromad (so\'m)', 'Daromad ($)', `Ehson UZS`, `Sof UZS` ]];
 
     let totalUZS = 0;
     let totalUSD = 0;
@@ -121,12 +121,11 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
       charityUZS += cU;
       netUZS += nU;
 
-      const catLabel = CATEGORIES.find((c) => c.id === t.category)?.label || 'Boshqa';
 
       return [
         String(idx + 1),
         t.date,
-        catLabel,
+        // Kategoriya olib tashlandi — izoh allaqachon kanal nomi bo'ladi
         t.description,
         Math.round(u).toLocaleString() + " so'm",
         "$" + d.toFixed(2),

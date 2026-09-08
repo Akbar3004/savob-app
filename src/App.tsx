@@ -23,6 +23,7 @@ import {
   FileText,
   Award,
   Sparkles,
+  Plus,
   Gauge,
   Youtube,
   Banknote,
@@ -30,7 +31,7 @@ import {
 } from 'lucide-react';
 import { Transaction, MonthlyStats, Channel, Payouts, PayoutFactors, formatUZS, formatUSD, MONTH_NAMES, SELF_CHANNEL_ID, isOwnedTx, hasCharityTx, txUZS, txUSD, isSettled, payoutFactors, Payout, isEmptyPayout, isValidRate, SelfChannel, channelInfo, DEFAULT_SELF_NAME } from './types';
 import { MetricCard } from './components/MetricCard';
-import { TransactionForm } from './components/TransactionForm';
+import { DailyEntryModal, type DailyEntry } from './components/DailyEntryModal';
 import { MonthlyChart } from './components/MonthlyChart';
 import { TransactionList } from './components/TransactionList';
 import { AuthModal } from './components/AuthModal';
@@ -68,6 +69,8 @@ export default function App() {
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [viewScope, setViewScope] = useState<string>('all'); // 'all' | 'self' | <channelId>
   const [isChannelsOpen, setIsChannelsOpen] = useState(false);
+  const [isDailyOpen, setIsDailyOpen] = useState(false);
+  const [dailyDate, setDailyDate] = useState<string | undefined>(undefined);
   const [userPassword, setUserPassword] = useState<string>('');
   
   // New States
@@ -78,7 +81,6 @@ export default function App() {
   const [isWrapOpen, setIsWrapOpen] = useState(false);
   const [wrapMonthKey, setWrapMonthKey] = useState('');
   
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
   const [fetchingRate, setFetchingRate] = useState(false);
@@ -620,24 +622,46 @@ export default function App() {
   const charityForChannel = (channelId?: string) =>
     hasCharityTx({ channelId }, channels) ? charityPercentage : 0;
 
-  const handleAddTransaction = (newTx: Omit<Transaction, 'id' | 'charityPercentage'>) => {
-    const tx: Transaction = {
-      ...newTx,
-      id: `tx-${Date.now()}`,
-      charityPercentage: charityForChannel(newTx.channelId),
-    };
-    const updated = [tx, ...transactions];
-    saveTransactions(updated);
-    showToast(`Yangi tushum kiritildi (${newTx.currency}).`);
-  };
+  /**
+   * Bir kunga bir necha kanalning summasini birdan saqlaydi.
+   * Shu sana va kanalda yozuv bo'lsa YANGILANADI — takror yozuv qo'shilmaydi.
+   */
+  const handleDailySave = (date: string, entries: DailyEntry[]) => {
+    let updated = [...transactions];
+    let added = 0;
+    let changed = 0;
 
-  const handleUpdateTransaction = (id: string, updatedTx: Omit<Transaction, 'id' | 'charityPercentage'>) => {
-    const updated = transactions.map((t) =>
-      t.id === id ? { ...t, ...updatedTx, charityPercentage: charityForChannel(updatedTx.channelId) } : t
-    );
+    entries.forEach((e, i) => {
+      const chId = e.channelId === SELF_CHANNEL_ID ? undefined : e.channelId;
+      const idx = updated.findIndex(
+        (t) => t.date === date && (t.channelId || SELF_CHANNEL_ID) === e.channelId
+      );
+      const name = channelInfo(chId, channels, selfChannel).name;
+      const base = {
+        amount: e.amount,
+        currency: e.currency,
+        date,
+        // Kategoriya olib tashlandi — ilova faqat YouTube daromadi uchun.
+        // Maydon eski yozuvlar bilan mos qolishi uchun saqlanadi.
+        category: 'social_media',
+        description: name,
+        channelId: chId,
+        charityPercentage: charityForChannel(chId),
+      };
+      if (idx >= 0) {
+        updated[idx] = { ...updated[idx], ...base };
+        changed++;
+      } else {
+        updated = [{ ...base, id: `tx-${Date.now()}-${i}` }, ...updated];
+        added++;
+      }
+    });
+
     saveTransactions(updated);
-    setEditingTransaction(null);
-    showToast('Tushum muvaffaqiyatli tahrirlandi.');
+    const parts = [];
+    if (added) parts.push(`${added} ta yangi`);
+    if (changed) parts.push(`${changed} ta yangilandi`);
+    showToast(`${date}: ${parts.join(', ')}.`, 'success');
   };
 
   const handleDeleteTransaction = (id: string) => {
@@ -654,7 +678,6 @@ export default function App() {
         performSync(updated, charityPercentage, exchangeRate, binId, incomeGoals, yearlyGoals, newDeleted);
       }
       showToast("Kirim ro'yxatdan o'chirildi.", 'info');
-      if (editingTransaction?.id === id) setEditingTransaction(null);
     }
   };
 
@@ -1186,6 +1209,19 @@ export default function App() {
           </div>
 
           <div className="flex gap-2 overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0 sm:overflow-visible">
+            {/* Kunlik tushum — eng ko'p ishlatiladigan amal, shuning uchun birinchi */}
+            <button
+              onClick={() => {
+                setDailyDate(undefined);
+                setIsDailyOpen(true);
+              }}
+              className="py-2 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-100 flex items-center gap-1.5 transition-all active:scale-[0.98] shrink-0 whitespace-nowrap"
+              title="Bir kunga barcha kanallarni birdan kiritish"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Kunlik tushum
+            </button>
+
             {/* Kanallarni boshqarish */}
             <button
               onClick={() => setIsChannelsOpen(true)}
@@ -1224,9 +1260,9 @@ export default function App() {
             {/* Start New Month Button */}
             <button
               onClick={handleStartNewMonth}
-              className="py-2 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-100 flex items-center gap-1.5 transition-all active:scale-[0.98] shrink-0 whitespace-nowrap"
+              className="py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-all active:scale-[0.98] shrink-0 whitespace-nowrap"
             >
-              <Sparkles className="w-3.5 h-3.5" />
+              <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
               Yangi oy boshlash
             </button>
           </div>
@@ -1448,25 +1484,9 @@ export default function App() {
           </motion.div>
         </div>
 
-        {/* Form + Chart Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-          <div className="lg:col-span-1">
-            <TransactionForm
-              onAdd={handleAddTransaction}
-              onUpdate={handleUpdateTransaction}
-              editingTransaction={editingTransaction}
-              onCancelEdit={() => setEditingTransaction(null)}
-              charityPercentage={charityPercentage}
-              exchangeRate={exchangeRate}
-              payouts={payouts}
-              factors={factors}
-              channels={channels}
-              selfChannel={selfChannel}
-            />
-          </div>
-          <div className="lg:col-span-2">
-            <MonthlyChart stats={monthlyStats} charityPercentage={charityPercentage} />
-          </div>
+        {/* Chart — tushum kiritish formasi alohida oynaga ko'chirilgani uchun to'liq kenglikda */}
+        <div className="mb-8">
+          <MonthlyChart stats={monthlyStats} charityPercentage={charityPercentage} />
         </div>
 
         {/* Transaction History */}
@@ -1475,8 +1495,9 @@ export default function App() {
             transactions={scopedTransactions}
             onDelete={handleDeleteTransaction}
             onEdit={(t) => {
-              setEditingTransaction(t);
-              window.scrollTo({ top: 500, behavior: 'smooth' });
+              // Sahifani sakratmaymiz — o'sha kunning oynasini ochamiz
+              setDailyDate(t.date);
+              setIsDailyOpen(true);
             }}
             currentPercentage={charityPercentage}
             exchangeRate={exchangeRate}
@@ -1496,6 +1517,8 @@ export default function App() {
         exchangeRate={exchangeRate}
         payouts={payouts}
         factors={factors}
+              channels={channels}
+        selfChannel={selfChannel}
       />
 
       <ExtremesModal
@@ -1505,6 +1528,8 @@ export default function App() {
         exchangeRate={exchangeRate}
         payouts={payouts}
         factors={factors}
+              channels={channels}
+        selfChannel={selfChannel}
       />
 
       <ExportPDFModal
@@ -1524,6 +1549,24 @@ export default function App() {
         exchangeRate={exchangeRate}
         payouts={payouts}
         factors={factors}
+              channels={channels}
+        selfChannel={selfChannel}
+      />
+
+      <DailyEntryModal
+        isOpen={isDailyOpen}
+        onClose={() => {
+          setIsDailyOpen(false);
+          setDailyDate(undefined);
+        }}
+        initialDate={dailyDate}
+        transactions={transactions}
+        channels={channels}
+        selfChannel={selfChannel}
+        charityPercentage={charityPercentage}
+        exchangeRate={exchangeRate}
+        payouts={payouts}
+        onSave={handleDailySave}
       />
 
       <ChannelsModal

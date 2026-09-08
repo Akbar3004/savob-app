@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Calendar, Wallet, Heart, TrendingUp, BarChart3, Percent, Check, Download } from 'lucide-react';
-import { Transaction, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, txUZS, txUSD, rateForMonth } from '../types';
+import { Transaction, Channel, SelfChannel, Payouts, PayoutFactors, formatUZS, formatUSD, txUZS, txUSD, rateForMonth, channelInfo, channelKeyOf, SELF_CHANNEL_ID } from '../types';
 import { jsPDF } from 'jspdf';
 import { appTodayISO, appWeekStartISO, appMonthKey, appMonthKeyOffset, realTodayISO } from '../appDate';
 
@@ -9,6 +9,8 @@ interface StatsModalProps {
   isOpen: boolean;
   onClose: () => void;
   transactions: Transaction[];
+  channels: Channel[];
+  selfChannel: SelfChannel | undefined;
   exchangeRate: number;
   payouts: Payouts;
   factors: PayoutFactors;
@@ -20,6 +22,8 @@ export const StatsModal: React.FC<StatsModalProps> = ({
   isOpen,
   onClose,
   transactions,
+  channels,
+  selfChannel,
   exchangeRate,
   payouts,
   factors,
@@ -74,7 +78,9 @@ export const StatsModal: React.FC<StatsModalProps> = ({
     let charityUZS = 0;
     let charityUSD = 0;
 
-    const categoryBreakdown: { [catId: string]: { uzs: number; count: number } } = {};
+    // Kategoriyalar olib tashlandi — ilova faqat YouTube daromadi uchun.
+    // Uning o'rniga KANALLAR kesimi ko'rsatiladi, bu ancha foydali.
+    const byChannel: { [id: string]: { uzs: number; count: number } } = {};
 
     dateFilteredTransactions.forEach((t) => {
       const u = toUZS(t);
@@ -87,27 +93,25 @@ export const StatsModal: React.FC<StatsModalProps> = ({
       charityUZS += cU;
       charityUSD += cD;
 
-      if (!categoryBreakdown[t.category]) {
-        categoryBreakdown[t.category] = { uzs: 0, count: 0 };
-      }
-      categoryBreakdown[t.category].uzs += u;
-      categoryBreakdown[t.category].count += 1;
+      const ch = channelKeyOf(t);
+      if (!byChannel[ch]) byChannel[ch] = { uzs: 0, count: 0 };
+      byChannel[ch].uzs += u;
+      byChannel[ch].count += 1;
     });
 
     const netUZS = totalUZS - charityUZS;
     const netUSD = totalUSD - charityUSD;
 
-    const breakdownList = Object.keys(categoryBreakdown).map((catId) => {
-      const cat = CATEGORIES.find((c) => c.id === catId);
-      const amount = categoryBreakdown[catId].uzs;
+    const breakdownList = Object.keys(byChannel).map((id) => {
+      const info = channelInfo(id === SELF_CHANNEL_ID ? undefined : id, channels, selfChannel);
+      const amount = byChannel[id].uzs;
       return {
-        id: catId,
-        label: cat?.label || 'Boshqa',
-        icon: cat?.icon || '📦',
-        color: cat?.color || '#6B7280',
+        id,
+        label: info.name,
+        color: info.color,
         amount,
         percentage: totalUZS > 0 ? (amount / totalUZS) * 100 : 0,
-        count: categoryBreakdown[catId].count,
+        count: byChannel[id].count,
       };
     }).sort((a, b) => b.amount - a.amount);
 
@@ -263,7 +267,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({
     doc.setTextColor(30, 41, 59);
     doc.setFontSize(12);
     doc.setFont('Helvetica', 'bold');
-    doc.text('Kategoriya ulushlari', M + 5.5, y);
+    doc.text('Kanallar ulushi', M + 5.5, y);
     y += 8;
 
     stats.breakdownList.forEach((item) => {
@@ -551,7 +555,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({
             {/* Category list */}
             <div>
               <h4 className="font-display font-bold text-sm text-slate-700 mb-3 flex items-center gap-1.5">
-                <Percent className="w-4 h-4 text-indigo-500" /> Kategoriya ulushlari
+                <Percent className="w-4 h-4 text-indigo-500" /> Kanallar ulushi
               </h4>
               {stats.breakdownList.length === 0 ? (
                 <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
@@ -563,7 +567,10 @@ export const StatsModal: React.FC<StatsModalProps> = ({
                     <div key={item.id} className="p-3 bg-slate-50/60 rounded-xl border border-slate-200/40">
                       <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-base">{item.icon}</span>
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: item.color }}
+                          />
                           <span className="text-xs font-bold text-slate-700">{item.label}</span>
                           <span className="text-[9px] text-slate-400 font-bold bg-slate-200/50 px-1.5 py-0.5 rounded">
                             {item.count} ta
