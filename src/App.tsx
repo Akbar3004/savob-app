@@ -34,6 +34,7 @@ import { TransactionForm } from './components/TransactionForm';
 import { MonthlyChart } from './components/MonthlyChart';
 import { TransactionList } from './components/TransactionList';
 import { AuthModal } from './components/AuthModal';
+import { readCache, writeCache } from './services/localCache';
 import { StatsModal } from './components/StatsModal';
 import { ExtremesModal } from './components/ExtremesModal';
 import { ExportPDFModal } from './components/ExportPDFModal';
@@ -95,56 +96,6 @@ export default function App() {
   useEffect(() => {
     binIdRef.current = binId;
   }, [binId]);
-
-  // ---- localStorage kesh yordamchilari (qurilmada ma'lumot hech qachon yo'qolmaydi) ----
-  const cacheKeys = (id: string) => ({
-    tx: `savob_tx_${id}`,
-    percent: `savob_percent_${id}`,
-    rate: `savob_rate_${id}`,
-    goals: `savob_goals_${id}`,
-    yearGoals: `savob_yeargoals_${id}`,
-    deleted: `savob_deleted_${id}`,
-    updated: `savob_updated_${id}`,
-    channels: `savob_channels_${id}`,
-    payouts: `savob_payouts_${id}`,
-    selfChan: `savob_selfchan_${id}`,
-  });
-
-  const writeCache = (id: string, d: UserData) => {
-    const k = cacheKeys(id);
-    localStorage.setItem(k.tx, JSON.stringify(d.transactions));
-    localStorage.setItem(k.percent, String(d.charityPercentage));
-    localStorage.setItem(k.rate, String(d.exchangeRate));
-    localStorage.setItem(k.goals, JSON.stringify(d.incomeGoals || {}));
-    localStorage.setItem(k.yearGoals, JSON.stringify(d.yearlyGoals || {}));
-    localStorage.setItem(k.deleted, JSON.stringify(d.deletedIds || []));
-    localStorage.setItem(k.updated, String(d.updatedAt || 0));
-    localStorage.setItem(k.channels, JSON.stringify(d.channels || []));
-    localStorage.setItem(k.payouts, JSON.stringify(d.payouts || {}));
-    localStorage.setItem(k.selfChan, JSON.stringify(d.selfChannel || null));
-  };
-
-  const readCache = (id: string): UserData | null => {
-    const k = cacheKeys(id);
-    const tx = localStorage.getItem(k.tx);
-    if (tx === null) return null;
-    try {
-      return {
-        transactions: JSON.parse(tx),
-        charityPercentage: parseInt(localStorage.getItem(k.percent) || '10', 10),
-        exchangeRate: parseFloat(localStorage.getItem(k.rate) || '12850'),
-        incomeGoals: JSON.parse(localStorage.getItem(k.goals) || '{}'),
-        yearlyGoals: JSON.parse(localStorage.getItem(k.yearGoals) || '{}'),
-        deletedIds: JSON.parse(localStorage.getItem(k.deleted) || '[]'),
-        updatedAt: parseInt(localStorage.getItem(k.updated) || '0', 10),
-        channels: JSON.parse(localStorage.getItem(k.channels) || '[]'),
-        payouts: JSON.parse(localStorage.getItem(k.payouts) || '{}'),
-        selfChannel: JSON.parse(localStorage.getItem(k.selfChan) || 'null') || undefined,
-      };
-    } catch {
-      return null;
-    }
-  };
 
   const applyUserData = (d: UserData) => {
     setTransactions(d.transactions);

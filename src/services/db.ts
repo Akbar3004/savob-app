@@ -99,16 +99,30 @@ export function mergeUserData(a: UserData, b: UserData): UserData {
 }
 
 /**
- * Parol xeshi ro'yxatdan o'tganini tekshiradi.
- * @returns binId (xesh) — mavjud bo'lsa; `null` — mavjud emas yoki xatolik.
+ * Hisob holati.
+ *  - `ok`       — shu parol bilan hisob bor
+ *  - `notfound` — bunday hisob yo'q (parol haqiqatan ro'yxatdan o'tmagan)
+ *  - `error`    — serverga ulanib bo'lmadi; parol haqida HECH NARSA deyish mumkin emas
  */
-export async function checkPasswordExists(hashedPassword: string): Promise<string | null> {
+export type AccountProbe = 'ok' | 'notfound' | 'error';
+
+/**
+ * Parol xeshi bo'yicha hisob bor-yo'qligini tekshiradi.
+ *
+ * DIQQAT: server xatosini "parol yo'q" dan ajratish SHART. Ilgari ikkalasi
+ * ham `null` qaytarardi va ombor ishlamay qolganda foydalanuvchiga "parolingiz
+ * ro'yxatdan o'tmagan" deb ko'rsatilardi — bu esa mutlaqo noto'g'ri xabar.
+ */
+export async function probeAccount(hashedPassword: string): Promise<AccountProbe> {
   try {
-    const res = await fetch(`${BASE_URL}/${hashedPassword}`);
-    return res.ok ? hashedPassword : null;
+    const res = await fetch(`${BASE_URL}/${hashedPassword}`, { cache: 'no-store' });
+    if (res.ok) return 'ok';
+    if (res.status === 404) return 'notfound';
+    // 503 (ombor sozlanmagan), 500 va boshqalar — bu server muammosi
+    return 'error';
   } catch (error) {
-    console.error('Error checking password:', error);
-    return null;
+    console.error('Hisobni tekshirishda tarmoq xatosi:', error);
+    return 'error';
   }
 }
 
