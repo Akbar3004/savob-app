@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Youtube, Plus, Trash2, Check, Edit2, User, Heart, Info } from 'lucide-react';
+import { X, Youtube, Plus, Trash2, Check, Edit2, User, Heart, Info, KeyRound, Copy, ShieldOff } from 'lucide-react';
+import {
+  createShare,
+  revokeShare,
+  generateShareCode,
+  type ShareEntry,
+} from '../services/share';
 import {
   Channel,
   ChannelMode,
@@ -23,6 +29,10 @@ interface ChannelsModalProps {
   selfChannel: SelfChannel | undefined;
   onChange: (channels: Channel[]) => void;
   onSelfChange: (self: SelfChannel) => void;
+  /** Egasining parol xeshi — ulashish yaratish uchun kerak. */
+  ownerHash: string;
+  shares: ShareEntry[];
+  onSharesChange: (shares: ShareEntry[]) => void;
 }
 
 /** Uch rejim uchun tugmalar tavsifi — qo'shishda ham, tahrirlashda ham bir xil. */
@@ -100,6 +110,9 @@ export const ChannelsModal: React.FC<ChannelsModalProps> = ({
   selfChannel,
   onChange,
   onSelfChange,
+  ownerHash,
+  shares,
+  onSharesChange,
 }) => {
   const [newName, setNewName] = useState('');
   const [newMode, setNewMode] = useState<ChannelMode>('other');
@@ -109,6 +122,9 @@ export const ChannelsModal: React.FC<ChannelsModalProps> = ({
   const [editingSelf, setEditingSelf] = useState(false);
   const [selfName, setSelfName] = useState('');
   const [selfColor, setSelfColor] = useState(DEFAULT_SELF_COLOR);
+  const [shareBusy, setShareBusy] = useState<string | null>(null);
+  const [shareError, setShareError] = useState('');
+  const [copied, setCopied] = useState<string | null>(null);
 
   const self = channelInfo(undefined, channels, selfChannel);
 
@@ -152,6 +168,50 @@ export const ChannelsModal: React.FC<ChannelsModalProps> = ({
     onChange(channels.map((c) => (c.id === id ? { ...c, name, ...modeFlags(editMode) } : c)));
     setEditingId(null);
     setEditName('');
+  };
+
+  const shareFor = (channelId: string) => shares.find((x) => x.channelId === channelId);
+
+  const giveAccess = async (c: Channel) => {
+    setShareError('');
+    setShareBusy(c.id);
+    const code = generateShareCode();
+    const result = await createShare(ownerHash, code, c.id, c.name, c.color);
+    setShareBusy(null);
+    if (result === 'ok') {
+      onSharesChange([
+        ...shares.filter((x) => x.channelId !== c.id),
+        { code, channelId: c.id, label: c.name, createdAt: Date.now() },
+      ]);
+      return;
+    }
+    setShareError(
+      result === 'taken'
+        ? "Parol band bo'lib chiqdi — qayta urinib ko'ring."
+        : "Kirish berib bo'lmadi. Internetni tekshirib, qayta urinib ko'ring."
+    );
+  };
+
+  const takeAccess = async (c: Channel) => {
+    const entry = shareFor(c.id);
+    if (!entry) return;
+    if (!confirm(`«${c.name}» uchun berilgan kirish bekor qilinsinmi? Parol shu zahoti ishlamay qoladi.`)) return;
+    setShareError('');
+    setShareBusy(c.id);
+    const ok = await revokeShare(ownerHash, entry.code);
+    setShareBusy(null);
+    if (ok) onSharesChange(shares.filter((x) => x.channelId !== c.id));
+    else setShareError("Bekor qilib bo'lmadi. Qayta urinib ko'ring.");
+  };
+
+  const copyCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(code);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      setShareError('Nusxa olinmadi — parolni qo\'lda ko\'chiring.');
+    }
   };
 
   const removeChannel = (id: string, name: string) => {
@@ -286,6 +346,7 @@ export const ChannelsModal: React.FC<ChannelsModalProps> = ({
             )}
             {channels.map((c) => {
               const mode = channelMode(c);
+              const share = shareFor(c.id);
               return (
                 <div
                   key={c.id}
@@ -365,10 +426,61 @@ export const ChannelsModal: React.FC<ChannelsModalProps> = ({
                       </div>
                     </div>
                   )}
+
+                  {/* Kanal egasiga faqat ko'rish uchun kirish berish */}
+                  {editingId !== c.id && (
+                    <div className="mt-3 pt-3 border-t border-slate-200/70">
+                      {share ? (
+                        <div className="space-y-2">
+                          <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">
+                            Kirish berilgan · faqat ko'rish
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 min-w-0 truncate font-mono text-[13px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 select-all">
+                              {share.code}
+                            </code>
+                            <button
+                              onClick={() => copyCode(share.code)}
+                              className="shrink-0 flex items-center gap-1 py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold transition-all"
+                            >
+                              {copied === share.code ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                              {copied === share.code ? 'Olindi' : 'Nusxa'}
+                            </button>
+                            <button
+                              onClick={() => takeAccess(c)}
+                              disabled={shareBusy === c.id}
+                              className="shrink-0 flex items-center gap-1 py-1.5 px-2.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-50 text-[10px] font-bold transition-all"
+                            >
+                              <ShieldOff className="w-3 h-3" /> Bekor
+                            </button>
+                          </div>
+                          <p className="text-[9px] text-slate-400 font-semibold leading-snug">
+                            Shu parol bilan kanal egasi FAQAT o'z kanalini ko'radi. Sizning
+                            daromadingiz va ehsoningiz unga ko'rinmaydi, hech narsa o'zgartira olmaydi.
+                          </p>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => giveAccess(c)}
+                          disabled={shareBusy === c.id}
+                          className="flex items-center gap-1.5 py-1.5 px-3 rounded-xl border border-slate-200 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 text-[10.5px] font-bold transition-all"
+                        >
+                          <KeyRound className="w-3 h-3" />
+                          {shareBusy === c.id ? 'Yaratilmoqda...' : 'Egasiga kirish berish'}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
+
+          {shareError && (
+            <p className="mb-3 text-[11px] font-semibold text-rose-500 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
+              {shareError}
+            </p>
+          )}
 
           {/* Add new channel */}
           <div className="pt-4 border-t border-slate-100 space-y-2.5">

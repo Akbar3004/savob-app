@@ -2,6 +2,8 @@
   "rewrites": [
     { "source": "/api/bins/:id", "destination": "/api/bins/[id]" },
     { "source": "/api/bins", "destination": "/api/bins" },
+    { "source": "/api/share/:id", "destination": "/api/share/[id]" },
+    { "source": "/api/share", "destination": "/api/share" },
     { "source": "/api/rate", "destination": "/api/rate" },
     { "source": "/api/health", "destination": "/api/health" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }

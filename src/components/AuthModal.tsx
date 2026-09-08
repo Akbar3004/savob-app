@@ -3,9 +3,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { KeyRound, ShieldAlert, CheckCircle, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { hashPassword, probeAccount, registerUser, loadUserData, type UserData } from '../services/db';
 import { readCache } from '../services/localCache';
+import { fetchGuestData, type GuestData } from '../services/share';
 
 interface AuthModalProps {
   onSuccess: (binId: string, data: UserData, passwordPlain: string) => void;
+  /** Mehmon paroli kiritilganda — faqat o'z kanalini ko'radigan ekran ochiladi. */
+  onGuest: (guestHash: string, data: GuestData, codePlain: string) => void;
 }
 
 /**
@@ -35,7 +38,7 @@ function passwordVariants(p: string): string[] {
   return [...out];
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
+export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onGuest }) => {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -93,7 +96,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
           return;
         }
 
-        // Topilmadi — telefon o'zgartirib yuborgan variantlarni ham sinaymiz
+        // O'z hisobi topilmadi — bu mehmon paroli bo'lishi mumkin
+        if (probe === 'notfound') {
+          const guest = await fetchGuestData(hashed);
+          if (guest) {
+            setSuccess(`«${guest.label}» kanali ochilmoqda — faqat ko'rish uchun...`);
+            setTimeout(() => onGuest(hashed, guest, password), 1000);
+            return;
+          }
+        }
+
+        // Telefon o'zgartirib yuborgan variantlarni ham sinaymiz
         let matched = hashed;
         let matchedPassword = password;
         if (probe === 'notfound') {

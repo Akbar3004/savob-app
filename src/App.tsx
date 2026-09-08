@@ -35,6 +35,8 @@ import { MonthlyChart } from './components/MonthlyChart';
 import { TransactionList } from './components/TransactionList';
 import { AuthModal } from './components/AuthModal';
 import { readCache, writeCache } from './services/localCache';
+import { GuestApp } from './GuestApp';
+import { fetchGuestData, type GuestData, type ShareEntry } from './services/share';
 import { StatsModal } from './components/StatsModal';
 import { ExtremesModal } from './components/ExtremesModal';
 import { ExportPDFModal } from './components/ExportPDFModal';
@@ -59,6 +61,9 @@ export default function App() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [payouts, setPayouts] = useState<Payouts>({});
   const [selfChannel, setSelfChannel] = useState<SelfChannel | undefined>(undefined);
+  const [shares, setShares] = useState<ShareEntry[]>([]);
+  // Mehmon rejimi — boshqa kanal egasi faqat o'z kanalini ko'radi
+  const [guest, setGuest] = useState<{ hash: string; data: GuestData } | null>(null);
   const [isPayoutsOpen, setIsPayoutsOpen] = useState(false);
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [viewScope, setViewScope] = useState<string>('all'); // 'all' | 'self' | <channelId>
@@ -107,6 +112,7 @@ export default function App() {
     setChannels(d.channels || []);
     setPayouts(d.payouts || {});
     setSelfChannel(d.selfChannel);
+    setShares(d.shares || []);
     deletedIdsRef.current = d.deletedIds || [];
     if (d.updatedAt) lastAppliedRef.current = d.updatedAt;
   };
@@ -135,6 +141,7 @@ export default function App() {
           Object.entries(d.payouts![m]?.actualByChannel || {}).sort(([a], [b]) => a.localeCompare(b)),
         ]),
       sc: [d.selfChannel?.name || '', d.selfChannel?.color || ''],
+      sh: [...(d.shares || [])].sort((a, b) => a.code.localeCompare(b.code)).map((x) => [x.code, x.channelId]),
     });
 
   const scheduleRetry = () => {
@@ -218,6 +225,28 @@ export default function App() {
       syncingRef.current = false;
     }
   };
+
+  // Mehmon sessiyasini tiklash — har safar parol yozish shart bo'lmasin
+  useEffect(() => {
+    const code = localStorage.getItem('savob_guest_code');
+    if (!code) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const h = await hashPassword(code);
+        const data = await fetchGuestData(h);
+        if (!cancelled && data) setGuest({ hash: h, data });
+        // Ma'lumot kelmasa (kirish bekor qilingan bo'lishi mumkin) — kirish
+        // oynasi ochiladi, foydalanuvchi xabardor bo'ladi
+        else if (!cancelled) localStorage.removeItem('savob_guest_code');
+      } catch {
+        /* tarmoq yo'q — kirish oynasi ochilaveradi */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Ilova ochilganda: sessiyani tiklash + barqaror bulut bilan sinxronlash
   useEffect(() => {
@@ -338,7 +367,8 @@ export default function App() {
     dels: string[] = deletedIdsRef.current,
     chans: Channel[] = channels,
     pays: Payouts = payouts,
-    self: SelfChannel | undefined = selfChannel
+    self: SelfChannel | undefined = selfChannel,
+    shrs: ShareEntry[] = shares
   ) => {
     const payload: UserData = {
       transactions: updatedTxs,
@@ -351,6 +381,7 @@ export default function App() {
       payouts: pays,
       selfChannel: self,
       updatedAt: Date.now(),
+      shares: shrs,
     };
 
     writeCache(currentBinId, payload);
@@ -462,6 +493,18 @@ export default function App() {
     );
     if (binId) {
       performSync(transactions, charityPercentage, exchangeRate, binId, incomeGoals, updatedYearly);
+    }
+  };
+
+  /** Kirish berish/bekor qilish natijasini saqlaydi. */
+  const handleSharesChange = (updated: ShareEntry[]) => {
+    setShares(updated);
+    if (binId) {
+      performSync(
+        transactions, charityPercentage, exchangeRate, binId,
+        incomeGoals, yearlyGoals, deletedIdsRef.current,
+        channels, payouts, selfChannel, updated
+      );
     }
   };
 
@@ -938,9 +981,32 @@ export default function App() {
     }
   };
 
+  // Mehmon rejimi — boshqa kanal egasi faqat o'z kanalini ko'radi.
+  // Bu ALOHIDA ekran: unda ma'lumot o'zgartiradigan yo'l umuman yo'q.
+  if (guest) {
+    return (
+      <GuestApp
+        guestHash={guest.hash}
+        data={guest.data}
+        onLogout={() => {
+          localStorage.removeItem('savob_guest_code');
+          setGuest(null);
+        }}
+      />
+    );
+  }
+
   // If not logged in, display AuthModal
   if (!binId) {
-    return <AuthModal onSuccess={handleAuthSuccess} />;
+    return (
+      <AuthModal
+        onSuccess={handleAuthSuccess}
+        onGuest={(hash, data, code) => {
+          localStorage.setItem('savob_guest_code', code);
+          setGuest({ hash, data });
+        }}
+      />
+    );
   }
 
   return (
@@ -1468,6 +1534,9 @@ export default function App() {
         selfChannel={selfChannel}
         onChange={handleChannelsChange}
         onSelfChange={handleSelfChannelChange}
+        ownerHash={binId}
+        shares={shares}
+        onSharesChange={handleSharesChange}
       />
 
       <AnalyticsModal
