@@ -8,6 +8,33 @@ interface AuthModalProps {
   onSuccess: (binId: string, data: UserData, passwordPlain: string) => void;
 }
 
+/**
+ * Parolning ehtimolli variantlari.
+ *
+ * Sabab: parol maydonida avtomatik katta harf o'chirilmagan edi. Ko'z
+ * belgisi bosilganda maydon type="text" ga aylanadi va telefon birinchi
+ * harfni o'zi katta qilib yuboradi (yoki oxiriga bo'sh joy qo'shadi).
+ * Shu sababli hisob "Parolim" ko'rinishida yaratilib, keyin to'g'ri
+ * "parolim" bilan kirib bo'lmay qolishi mumkin.
+ *
+ * Kirishda asosiy parol topilmasa, shu variantlar ham tekshiriladi.
+ * Bu xavfsiz: har bir variant baribir to'g'ri xesh bilan solishtiriladi,
+ * ya'ni boshqa birovning hisobiga tushib qolish imkoni yo'q.
+ */
+function passwordVariants(p: string): string[] {
+  const out = new Set<string>();
+  const trimmed = p.trim();
+  if (trimmed && trimmed !== p) out.add(trimmed);
+  const base = trimmed || p;
+  if (base) {
+    const lowerFirst = base.charAt(0).toLowerCase() + base.slice(1);
+    const upperFirst = base.charAt(0).toUpperCase() + base.slice(1);
+    if (lowerFirst !== p) out.add(lowerFirst);
+    if (upperFirst !== p) out.add(upperFirst);
+  }
+  return [...out];
+}
+
 export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   const [password, setPassword] = useState('');
@@ -66,20 +93,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
           return;
         }
 
+        // Topilmadi — telefon o'zgartirib yuborgan variantlarni ham sinaymiz
+        let matched = hashed;
+        let matchedPassword = password;
         if (probe === 'notfound') {
-          setError("Ushbu parol ro'yxatdan o'tmagan. Avval «Yangi hisob» bo'limidan ro'yxatdan o'ting.");
-          setLoading(false);
-          return;
+          let found: { hash: string; pw: string } | null = null;
+          for (const variant of passwordVariants(password)) {
+            const h = await hashPassword(variant);
+            if ((await probeAccount(h)) === 'ok') {
+              found = { hash: h, pw: variant };
+              break;
+            }
+          }
+          if (!found) {
+            setError(
+              "Ushbu parol ro'yxatdan o'tmagan. Avval «Yangi hisob» bo'limidan ro'yxatdan o'ting."
+            );
+            setLoading(false);
+            return;
+          }
+          matched = found.hash;
+          matchedPassword = found.pw;
         }
 
-        const data = await loadUserData(hashed);
+        const data = await loadUserData(matched);
         if (!data) {
           // Hisob bor, lekin o'qib bo'lmadi — mahalliy nusxa bo'lsa o'shani beramiz
-          const cached = readCache(hashed);
+          const cached = readCache(matched);
           if (cached) {
             setOffline(true);
             setSuccess("Ma'lumot serverdan olinmadi — qurilmadagi nusxadan kirildi.");
-            setTimeout(() => onSuccess(hashed, cached, password), 1400);
+            setTimeout(() => onSuccess(matched, cached, matchedPassword), 1400);
             return;
           }
           setError("Ma'lumotlarni yuklab olishda xatolik yuz berdi. Qayta urinib ko'ring.");
@@ -87,10 +131,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
           return;
         }
 
-        setSuccess("Tizimga muvaffaqiyatli kirildi! Yuklanmoqda...");
+        setSuccess(
+          matchedPassword === password
+            ? 'Tizimga muvaffaqiyatli kirildi! Yuklanmoqda...'
+            : `Hisobingiz «${matchedPassword}» ko'rinishida saqlangan ekan — shu bilan kirildi.`
+        );
         setTimeout(() => {
-          onSuccess(hashed, data, password);
-        }, 1000);
+          onSuccess(matched, data, matchedPassword);
+        }, matchedPassword === password ? 1000 : 2200);
       } else {
         // Register
         const probe = await probeAccount(hashed);
@@ -211,6 +259,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Parolingizni kiriting"
                 disabled={loading}
+                autoCapitalize="none"
+                autoCorrect="off"
+                autoComplete="current-password"
+                spellCheck={false}
                 className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm font-semibold text-slate-800 placeholder-slate-300"
               />
               <button
@@ -238,6 +290,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Parolni qayta kiriting"
                 disabled={loading}
+                autoCapitalize="none"
+                autoCorrect="off"
+                autoComplete="new-password"
+                spellCheck={false}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm font-semibold text-slate-800 placeholder-slate-300"
               />
             </motion.div>
