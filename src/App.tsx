@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion } from 'motion/react';
 import {
   Heart,
@@ -602,6 +602,21 @@ export default function App() {
     }
   };
 
+  // Sarlavha balandligi — boshqaruv paneli aynan uning ostiga yopishib turadi.
+  // Qat'iy raqam yozib qo'ymaymiz: telefonda sarlavha balandligi boshqacha
+  // bo'lishi mumkin, shuning uchun o'lchab olamiz.
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const headerResizeRef = useRef<ResizeObserver | null>(null);
+  const headerRef = useCallback((node: HTMLElement | null) => {
+    headerResizeRef.current?.disconnect();
+    if (!node) return;
+    const measure = () => setHeaderHeight(node.getBoundingClientRect().height);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(node);
+    headerResizeRef.current = ro;
+  }, []);
+
   const showToast = (text: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 3000);
@@ -1001,26 +1016,26 @@ export default function App() {
       )}
 
       {/* Header */}
-      <header className="glass sticky top-0 z-40 border-b border-white/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <header ref={headerRef} className="glass sticky top-0 z-40 border-b border-white/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <motion.div
               initial={{ rotate: -10, scale: 0.8 }}
               animate={{ rotate: 0, scale: 1 }}
               transition={{ type: 'spring', stiffness: 200 }}
-              className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200/50"
+              className="w-9 h-9 sm:w-11 sm:h-11 shrink-0 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200/50"
             >
               <HeartHandshake className="w-5 h-5" />
             </motion.div>
-            <div>
-              <h1 className="text-base md:text-lg font-black font-display tracking-tight">
-                <span className="gradient-text">SAVOB</span> <span className="text-slate-800">APP</span>
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base md:text-lg font-black font-display tracking-tight truncate">
+                <span className="gradient-text">SAVOB</span><span className="hidden sm:inline text-slate-800"> APP</span>
               </h1>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
+                <span className="hidden sm:inline text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
                   Ehsan Hisoblagich
                 </span>
-                <span className="text-slate-300">•</span>
+                <span className="hidden sm:inline text-slate-300">•</span>
                 <span className="flex items-center gap-1">
                   {syncStatus === 'synced' && (
                     <span className="text-[10px] font-bold text-emerald-500 flex items-center gap-0.5">
@@ -1043,7 +1058,7 @@ export default function App() {
           </div>
 
           {/* User profile & actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <div className="hidden lg:flex items-center gap-2 bg-slate-100 border border-slate-200/60 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700">
               <User className="w-4 h-4 text-indigo-500" />
               <span>Parol: {userPassword.slice(0, 3)}***</span>
@@ -1052,7 +1067,7 @@ export default function App() {
             {/* Detailed Stats Quick Trigger */}
             <button
               onClick={() => setIsStatsOpen(true)}
-              className="p-2.5 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold"
+              className="p-2 sm:p-2.5 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold"
               title="Batafsil statistika"
             >
               <BarChart3 className="w-4 h-4 text-indigo-500" />
@@ -1062,7 +1077,7 @@ export default function App() {
             {/* Personal Min/Max Analysis Trigger */}
             <button
               onClick={() => setIsExtremesOpen(true)}
-              className="p-2.5 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold"
+              className="p-2 sm:p-2.5 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold"
               title="Shaxsiy tahlil: eng katta / eng kichik / o'rtacha kirim"
             >
               <Gauge className="w-4 h-4 text-slate-600" />
@@ -1071,7 +1086,7 @@ export default function App() {
             {/* PDF Export Quick Trigger */}
             <button
               onClick={() => setIsExportOpen(true)}
-              className="p-2.5 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold"
+              className="p-2 sm:p-2.5 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold"
               title="PDF jadval yuklab olish"
             >
               <FileText className="w-4 h-4 text-purple-500" />
@@ -1080,7 +1095,7 @@ export default function App() {
 
             <button
               onClick={handleExportData}
-              className="p-2.5 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold"
+              className="p-2 sm:p-2.5 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold"
               title="Zaxira nusxasini yuklab olish"
             >
               <Download className="w-4 h-4" />
@@ -1088,7 +1103,7 @@ export default function App() {
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="p-2.5 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold"
+              className="p-2 sm:p-2.5 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold"
               title="Fayldan tiklash"
             >
               <Upload className="w-4 h-4" />
@@ -1096,7 +1111,7 @@ export default function App() {
             </button>
             <button
               onClick={handleLogout}
-              className="p-2.5 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50/50 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold"
+              className="p-2 sm:p-2.5 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50/50 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold"
               title="Chiqish"
             >
               <LogOut className="w-4 h-4" />
@@ -1108,16 +1123,23 @@ export default function App() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 w-full">
 
-        {/* Dashboard Period Selector, Channel Scope & Start New Month */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 p-4 bg-white/60 backdrop-blur rounded-2xl border border-slate-200/50 shadow-sm">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {/* Dashboard Period Selector, Channel Scope & Start New Month
+            Sahifa aylantirilganda sarlavha ostiga yopishib turadi, shunda
+            davr/kanal tanlash va tugmalar har doim qo'l ostida bo'ladi. */}
+        <div
+          style={{ top: headerHeight }}
+          className="sticky z-30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 mb-6 p-3 sm:p-4 bg-white/85 backdrop-blur-xl rounded-2xl border border-slate-200/60 shadow-sm shadow-slate-200/50"
+        >
+          <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-2 min-w-0">
             <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-indigo-500" />
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Davr:</span>
+              <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
+              {/* Telefonda yorliq yashiriladi — tanlangan qiymat o'zi tushunarli
+                  va panel ekranning yarmini egallab qolmaydi */}
+              <span className="hidden sm:inline text-xs font-bold text-slate-500 uppercase tracking-wider">Davr:</span>
               <select
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
-                className="pl-3 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 cursor-pointer"
+                className="min-w-0 max-w-[52vw] sm:max-w-none pl-3 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 cursor-pointer"
               >
                 <option value="all">Barcha davrlar</option>
                 {availablePeriods.map((p) => (
@@ -1129,12 +1151,12 @@ export default function App() {
             {/* Kanal bo'yicha ko'rish (faqat boshqa kanallar mavjud bo'lsa) */}
             {channels.length > 0 && (
               <div className="flex items-center gap-2">
-                <Youtube className="w-4 h-4 text-rose-500" />
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Kanal:</span>
+                <Youtube className="w-4 h-4 text-rose-500 shrink-0" />
+                <span className="hidden sm:inline text-xs font-bold text-slate-500 uppercase tracking-wider">Kanal:</span>
                 <select
                   value={viewScope}
                   onChange={(e) => setViewScope(e.target.value)}
-                  className="pl-3 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-bold text-slate-700 cursor-pointer"
+                  className="min-w-0 max-w-[52vw] sm:max-w-none pl-3 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-bold text-slate-700 cursor-pointer"
                 >
                   <option value="all">Umumiy (hammasi)</option>
                   <option value="self">Faqat meniki</option>
@@ -1146,11 +1168,11 @@ export default function App() {
             )}
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0 sm:overflow-visible">
             {/* Kanallarni boshqarish */}
             <button
               onClick={() => setIsChannelsOpen(true)}
-              className="py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-all active:scale-[0.98]"
+              className="py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-all active:scale-[0.98] shrink-0 whitespace-nowrap"
               title="Kanallarni qo'shish/tahrirlash"
             >
               <Youtube className="w-3.5 h-3.5 text-rose-500" />
@@ -1160,7 +1182,7 @@ export default function App() {
             {/* To'lovlar va kurs */}
             <button
               onClick={() => setIsPayoutsOpen(true)}
-              className="py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-all active:scale-[0.98] relative"
+              className="py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-all active:scale-[0.98] shrink-0 whitespace-nowrap relative"
               title="Oylik to'lov kurslarini kiritish"
             >
               <Banknote className="w-3.5 h-3.5 text-emerald-500" />
@@ -1175,7 +1197,7 @@ export default function App() {
             {/* Chuqur tahlil */}
             <button
               onClick={() => setIsAnalyticsOpen(true)}
-              className="py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-all active:scale-[0.98]"
+              className="py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-all active:scale-[0.98] shrink-0 whitespace-nowrap"
               title="Mavsumiylik, kanallar taqqoslash va oy kunlari naqshi"
             >
               <Activity className="w-3.5 h-3.5 text-violet-500" />
@@ -1185,7 +1207,7 @@ export default function App() {
             {/* Start New Month Button */}
             <button
               onClick={handleStartNewMonth}
-              className="py-2 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-100 flex items-center gap-1.5 transition-all active:scale-[0.98]"
+              className="py-2 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-100 flex items-center gap-1.5 transition-all active:scale-[0.98] shrink-0 whitespace-nowrap"
             >
               <Sparkles className="w-3.5 h-3.5" />
               Yangi oy boshlash
