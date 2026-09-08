@@ -4,6 +4,14 @@ import { Transaction, Channel, Payouts, SelfChannel } from '../types';
 // binId === parol xeshi (SHA-256, hex). Alohida registry kerak emas.
 const BASE_URL = '/api/bins';
 
+/** Egasi bergan kirish yozuvi. Ochiq kod ham shu yerda — egasi uni qayta nusxa oladi. */
+export interface ShareEntry {
+  code: string;
+  channelId: string;
+  label: string;
+  createdAt: number;
+}
+
 export interface UserData {
   transactions: Transaction[];
   charityPercentage: number;
@@ -20,6 +28,8 @@ export interface UserData {
   payouts?: Payouts;
   // O'chirilgan tranzaksiya id'lari (tombstone) — birlashtirishda qayta tirilmasligi uchun.
   deletedIds?: string[];
+  // Boshqa insonlarga berilgan kirishlar (kanal egalari o'z kanalini ko'rishi uchun).
+  shares?: ShareEntry[];
   // Oxirgi yozilgan vaqt (ms). Server har PUT'da yangilaydi; qurilmalarni solishtirishda ishlatiladi.
   updatedAt?: number;
 }
@@ -56,6 +66,7 @@ function normalize(data: any): UserData {
       data?.selfChannel && typeof data.selfChannel === 'object' ? data.selfChannel : undefined,
     payouts: data?.payouts && typeof data.payouts === 'object' ? data.payouts : {},
     deletedIds: Array.isArray(data?.deletedIds) ? data.deletedIds : [],
+    shares: Array.isArray(data?.shares) ? data.shares : [],
     updatedAt: typeof data?.updatedAt === 'number' ? data.updatedAt : 0,
   };
 }
@@ -93,6 +104,7 @@ export function mergeUserData(a: UserData, b: UserData): UserData {
     channels: Array.from(chanById.values()),
     selfChannel: newer.selfChannel || older.selfChannel,
     payouts: { ...(older.payouts || {}), ...(newer.payouts || {}) },
+    shares: newer.shares || older.shares || [],
     deletedIds,
     updatedAt: Math.max(aTime, bTime),
   };

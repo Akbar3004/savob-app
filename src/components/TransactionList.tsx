@@ -7,6 +7,16 @@ interface TransactionListProps {
   transactions: Transaction[];
   onDelete: (id: string) => void;
   onEdit: (transaction: Transaction) => void;
+  /**
+   * Faqat o'qish rejimi (mehmon ekrani uchun). Tahrirlash va o'chirish
+   * tugmalari umuman CHIZILMAYDI — yashirilmaydi, balki mavjud bo'lmaydi.
+   */
+  readOnly?: boolean;
+  /**
+   * Ehson ustunlarini ko'rsatishmi. Mehmon ekranida `false` — u kanaldan
+   * ehson ushlanmaydi va bu ustunlar faqat nol ko'rsatib chalkashtirardi.
+   */
+  showCharity?: boolean;
   currentPercentage: number;
   exchangeRate: number;
   channels: Channel[];
@@ -19,6 +29,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   transactions,
   onDelete,
   onEdit,
+  readOnly = false,
+  showCharity = true,
   currentPercentage,
   exchangeRate,
   channels,
@@ -116,7 +128,9 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h3 className="font-display font-bold text-slate-800 text-lg">Kundalik tushumlar tarixi</h3>
-          <p className="text-xs text-slate-400">Barcha yozilgan summalarni saralash va tahrirlash</p>
+          <p className="text-xs text-slate-400">
+            {readOnly ? 'Barcha yozilgan summalar' : 'Barcha yozilgan summalarni saralash va tahrirlash'}
+          </p>
         </div>
 
         {/* Filters */}
@@ -183,9 +197,13 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 <th className="py-3 px-4">Kategoriya</th>
                 <th className="py-3 px-4 text-center">Valyuta</th>
                 <th className="py-3 px-4 text-right">Jami summa</th>
-                <th className="py-3 px-4 text-right text-amber-500">Hayriya ({currentPercentage}%)</th>
-                <th className="py-3 px-4 text-right text-emerald-600">Qolgan</th>
-                <th className="py-3 px-4 text-center">Amallar</th>
+                {showCharity && (
+                  <>
+                    <th className="py-3 px-4 text-right text-amber-500">Hayriya ({currentPercentage}%)</th>
+                    <th className="py-3 px-4 text-right text-emerald-600">Qolgan</th>
+                  </>
+                )}
+                {!readOnly && <th className="py-3 px-4 text-center">Amallar</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -302,32 +320,38 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                         </div>
                       )}
                     </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="font-medium text-xs text-amber-500 font-display">{formatUZS(charityUZS)}</div>
-                      <div className="text-[10px] text-amber-400">{formatUSD(charityUSD)}</div>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="font-bold text-xs text-emerald-600 font-display">{formatUZS(netUZS)}</div>
-                      <div className="text-[10px] text-emerald-400">{formatUSD(netUSD)}</div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => onEdit(t)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
-                          title="Tahrirlash"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => onDelete(t.id)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all"
-                          title="O'chirish"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
+                    {showCharity && (
+                      <>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="font-medium text-xs text-amber-500 font-display">{formatUZS(charityUZS)}</div>
+                          <div className="text-[10px] text-amber-400">{formatUSD(charityUSD)}</div>
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="font-bold text-xs text-emerald-600 font-display">{formatUZS(netUZS)}</div>
+                          <div className="text-[10px] text-emerald-400">{formatUSD(netUSD)}</div>
+                        </td>
+                      </>
+                    )}
+                    {!readOnly && (
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => onEdit(t)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                            title="Tahrirlash"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => onDelete(t.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all"
+                            title="O'chirish"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}

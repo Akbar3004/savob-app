@@ -5,6 +5,11 @@ import { BarChart3, Heart, TrendingUp, TrendingDown, Wallet, CalendarRange } fro
 interface MonthlyChartProps {
   stats: MonthlyStats[];
   charityPercentage: number;
+  /**
+   * Ehson qismini ko'rsatishmi. Mehmon ekranida `false` — u yerda ehson
+   * tushunchasi umuman yo'q va uni ko'rsatish faqat chalkashtirardi.
+   */
+  showCharity?: boolean;
 }
 
 // Ustun ranglari. "Sof" yashil — pastdagi SOF kartasi bilan bir xil;
@@ -13,7 +18,7 @@ interface MonthlyChartProps {
 const NET_FILL = 'linear-gradient(180deg, #10b981 0%, #047857 100%)';
 const CHARITY_FILL = 'linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%)';
 
-export const MonthlyChart: React.FC<MonthlyChartProps> = ({ stats, charityPercentage }) => {
+export const MonthlyChart: React.FC<MonthlyChartProps> = ({ stats, charityPercentage, showCharity = true }) => {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   const activeIdx = hoveredIdx !== null ? Math.min(hoveredIdx, stats.length - 1) : stats.length - 1;
@@ -65,19 +70,23 @@ export const MonthlyChart: React.FC<MonthlyChartProps> = ({ stats, charityPercen
           </div>
           <div className="min-w-0">
             <h3 className="font-display font-bold text-base tracking-wide">Oylik tahlil</h3>
-            <p className="text-[11px] text-indigo-300/80 truncate">Daromadlar va ehson ulushi</p>
+            <p className="text-[11px] text-indigo-300/80 truncate">
+              {showCharity ? "Daromadlar va ehson ulushi" : 'Oylar bo\'yicha daromad'}
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-3.5 text-[10px] font-bold uppercase tracking-wider text-indigo-200/70 shrink-0">
-          <span className="flex items-center gap-1.5">
-            <i className="w-2.5 h-2.5 rounded-sm" style={{ background: NET_FILL }} />
-            Sof
-          </span>
-          <span className="flex items-center gap-1.5">
-            <i className="w-2.5 h-2.5 rounded-sm" style={{ background: CHARITY_FILL }} />
-            Ehson
-          </span>
-        </div>
+        {showCharity && (
+          <div className="flex items-center gap-3.5 text-[10px] font-bold uppercase tracking-wider text-indigo-200/70 shrink-0">
+            <span className="flex items-center gap-1.5">
+              <i className="w-2.5 h-2.5 rounded-sm" style={{ background: NET_FILL }} />
+              Sof
+            </span>
+            <span className="flex items-center gap-1.5">
+              <i className="w-2.5 h-2.5 rounded-sm" style={{ background: CHARITY_FILL }} />
+              Ehson
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ── Katta raqam (tanlangan oy) + yillik jami ── */}
@@ -210,6 +219,7 @@ export const MonthlyChart: React.FC<MonthlyChartProps> = ({ stats, charityPercen
       </div>
 
       {/* ── Tanlangan oyning taqsimoti ── */}
+      {showCharity && (
       <div className="grid grid-cols-3 gap-2 mt-5 pt-5 border-t border-white/10">
         <div className="bg-white/[0.04] p-3 rounded-xl border border-white/5">
           <p className="text-[9px] text-indigo-300 uppercase font-bold tracking-wider mb-1 flex items-center gap-1">
@@ -245,6 +255,7 @@ export const MonthlyChart: React.FC<MonthlyChartProps> = ({ stats, charityPercen
           </p>
         </div>
       </div>
+      )}
     </div>
   );
 };
