@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Transaction, Channel, SelfChannel, Payouts, PayoutFactors, CATEGORIES, formatUZS, formatUSD, hasCharityTx, CHANNEL_MODE_LABELS, SELF_CHANNEL_ID, txUZS, txUSD, isSettled, channelInfo, txDisplayName, channelKeyOf } from '../types';
-import { Trash2, Edit2, Search, Filter, Calendar, DollarSign, Banknote, ArrowUpRight, ArrowDownRight, Youtube, User } from 'lucide-react';
+import { Transaction, Channel, SelfChannel, Payouts, PayoutFactors, formatUZS, formatUSD, hasCharityTx, CHANNEL_MODE_LABELS, SELF_CHANNEL_ID, txUZS, txUSD, isSettled, channelInfo, txDisplayName, channelKeyOf } from '../types';
+import { Trash2, Edit2, Search, Calendar, DollarSign, Banknote, ArrowUpRight, ArrowDownRight, Youtube, User } from 'lucide-react';
 import { appMonthKey } from '../appDate';
 
 interface TransactionListProps {
@@ -43,7 +43,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   const currentMonth = useMemo(() => appMonthKey(), []);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
   // Ro'yxat har oy boshida yangilanadi: sukut bo'yicha faqat joriy oy ko'rinadi.
   // Eski oylar tarixda saqlanadi va pastdagi tanlagichdan ochiladi.
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
@@ -76,17 +75,13 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         const q = searchTerm.toLowerCase();
         const matchesSearch =
           t.description.toLowerCase().includes(q) ||
-          channelInfo(t.channelId, channels, selfChannel).name.toLowerCase().includes(q) ||
-          CATEGORIES.find((c) => c.id === t.category)
-            ?.label.toLowerCase()
-            .includes(q);
-        const matchesCategory = selectedCategory === 'all' || t.category === selectedCategory;
+          channelInfo(t.channelId, channels, selfChannel).name.toLowerCase().includes(q);
         const matchesMonth = selectedMonth === 'all' || t.date.startsWith(selectedMonth);
-        return matchesSearch && matchesCategory && matchesMonth;
+        return matchesSearch && matchesMonth;
       })
       // Eng yangi sana yuqorida; bir xil sanada esa keyin kiritilgani yuqorida
       .sort((a, b) => b.date.localeCompare(a.date) || idStamp(b.id) - idStamp(a.id));
-  }, [transactions, searchTerm, selectedCategory, selectedMonth, channels, selfChannel]);
+  }, [transactions, searchTerm, selectedMonth, channels, selfChannel]);
 
   const getAmountInUZS = (t: Transaction) => txUZS(t, payouts, exchangeRate, factors);
   const getAmountInUSD = (t: Transaction) => txUSD(t, payouts, exchangeRate, factors);
@@ -158,19 +153,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({
             </select>
             <Calendar className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5 pointer-events-none" />
           </div>
-          <div className="relative">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="pl-3 pr-8 py-2 text-xs bg-slate-50/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-slate-700 appearance-none cursor-pointer font-semibold"
-            >
-              <option value="all">Barcha kategoriyalar</option>
-              {CATEGORIES.map((c) => (
-                <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
-              ))}
-            </select>
-            <Filter className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5 pointer-events-none" />
-          </div>
         </div>
       </div>
 
@@ -178,12 +160,12 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       {filteredTransactions.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center min-h-[220px] bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-8">
           <p className="text-sm font-semibold text-slate-500">
-            {selectedMonth === currentMonth && searchTerm === '' && selectedCategory === 'all'
+            {selectedMonth === currentMonth && searchTerm === ''
               ? 'Bu oy hali tushum kiritilmagan'
               : "Hech qanday ma'lumot topilmadi"}
           </p>
           <p className="text-xs text-slate-400 mt-1 text-center max-w-xs">
-            {selectedMonth === currentMonth && searchTerm === '' && selectedCategory === 'all'
+            {selectedMonth === currentMonth && searchTerm === ''
               ? "Yangi oy boshlandi. Oldingi oylar tarixi «oylar» ro'yxatidan ochiladi."
               : "Filtr sozlamalarini o'zgartiring yoki birinchi tushumni qo'shing."}
           </p>
@@ -194,7 +176,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({
             <thead>
               <tr className="border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 <th className="py-3 px-4">Sana va Izoh</th>
-                <th className="py-3 px-4">Kategoriya</th>
                 <th className="py-3 px-4 text-center">Valyuta</th>
                 <th className="py-3 px-4 text-right">Jami summa</th>
                 {showCharity && (
@@ -216,7 +197,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 const charityUSD = (amtUSD * rowPct) / 100;
                 const netUZS = amtUZS - charityUZS;
                 const netUSD = amtUSD - charityUSD;
-                const cat = CATEGORIES.find((c) => c.id === t.category);
                 const chan = channelFor(t);
 
                 // Taqqoslash: shu yozuv AYNAN O'Z kanalining o'tgan oydagi
@@ -259,18 +239,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                           {chan.name}
                         </span>
                       </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span
-                        style={{
-                          backgroundColor: `${cat?.color}12`,
-                          color: cat?.color || '#6B7280',
-                        }}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold"
-                      >
-                        <span>{cat?.icon}</span>
-                        {cat?.label || 'Boshqa'}
-                      </span>
                     </td>
                     <td className="py-3.5 px-4 text-center">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold ${

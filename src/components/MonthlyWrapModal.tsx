@@ -1,13 +1,15 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Download, TrendingUp, Heart, Wallet, CalendarDays, Layers, Sparkles } from 'lucide-react';
-import { Transaction, Payouts, PayoutFactors, CATEGORIES, formatUSD, MONTH_NAMES, txUZS, rateForMonth, isSettled } from '../types';
+import { Transaction, Channel, SelfChannel, Payouts, PayoutFactors, formatUSD, MONTH_NAMES, txUZS, rateForMonth, isSettled, channelInfo, channelKeyOf, SELF_CHANNEL_ID } from '../types';
 import { jsPDF } from 'jspdf';
 
 interface MonthlyWrapModalProps {
   isOpen: boolean;
   onClose: () => void;
   transactions: Transaction[];
+  channels: Channel[];
+  selfChannel: SelfChannel | undefined;
   monthKey: string; // YYYY-MM
   exchangeRate: number;
   payouts: Payouts;
@@ -73,6 +75,8 @@ export const MonthlyWrapModal: React.FC<MonthlyWrapModalProps> = ({
   isOpen,
   onClose,
   transactions,
+  channels,
+  selfChannel,
   monthKey,
   exchangeRate,
   payouts,
@@ -108,21 +112,21 @@ export const MonthlyWrapModal: React.FC<MonthlyWrapModalProps> = ({
       charityUZS += (amt * t.charityPercentage) / 100;
       // Yorliq foizi faqat ehson ushlanadigan (self) yozuvdan olinadi
       if (t.charityPercentage > 0) charityPercentage = t.charityPercentage;
-      catAmounts[t.category] = (catAmounts[t.category] || 0) + amt;
+      const ch = channelKeyOf(t);
+      catAmounts[ch] = (catAmounts[ch] || 0) + amt;
       dayAmounts[t.date] = (dayAmounts[t.date] || 0) + amt;
     });
 
     const netUZS = totalUZS - charityUZS;
 
-    // Har bir daromad manbai — alohida, ulushi bilan
+    // Har bir KANAL alohida, ulushi bilan (kategoriyalar olib tashlangan)
     const categories = Object.keys(catAmounts)
       .map((id) => {
-        const meta = CATEGORIES.find((c) => c.id === id);
+        const info = channelInfo(id === SELF_CHANNEL_ID ? undefined : id, channels, selfChannel);
         return {
           id,
-          label: meta?.label || id,
-          icon: meta?.icon || '📦',
-          color: meta?.color || '#6b7280',
+          label: info.name,
+          color: info.color,
           amount: catAmounts[id],
           pct: totalUZS > 0 ? (catAmounts[id] / totalUZS) * 100 : 0,
         };
@@ -366,7 +370,7 @@ export const MonthlyWrapModal: React.FC<MonthlyWrapModalProps> = ({
     doc.setFont('Helvetica', 'bold');
     setText(INK.soft);
     doc.setFontSize(7);
-    doc.text('DAROMAD MANBALARI', 16, 152, { charSpace: 1.1 });
+    doc.text('KANALLAR', 16, 152, { charSpace: 1.1 });
 
     const rows = stats.categories.slice(0, 6);
     const startY = 158;
@@ -575,7 +579,7 @@ export const MonthlyWrapModal: React.FC<MonthlyWrapModalProps> = ({
             {/* Daromad manbalari — har biri alohida */}
             <div className="mt-5">
               <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
-                Daromad manbalari
+                Kanallar
               </p>
               <div className="mt-3 space-y-3">
                 {stats.categories.length === 0 && (
@@ -587,7 +591,10 @@ export const MonthlyWrapModal: React.FC<MonthlyWrapModalProps> = ({
                   <div key={cat.id}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold text-slate-200">
-                        <span className="shrink-0">{cat.icon}</span>
+                        <span
+                          className="w-2 h-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: cat.color }}
+                        />
                         <span className="truncate">{cat.label}</span>
                       </span>
                       <span className="shrink-0 text-[11px] font-black tabular-nums text-white">
