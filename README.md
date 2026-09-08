@@ -38,6 +38,36 @@ Kunlik daromadlarni kiritish, jamg'armani kuzatish, belgilangan foizda hayriya (
   avval AdSense'ga tushgan summa, keyinroq bankdan yechilgandagi kurs. Har biri
   mustaqil — birini kiritib, ikkinchisini keyin qo'shsa bo'ladi
 
+## Telefonga o'rnatish (PWA)
+
+Ilova telefon ilovasi sifatida bosh ekranga o'rnatiladi — App Store kerak emas.
+
+**iPhone:** saytni **Safari**da oching → pastdagi «Ulashish» tugmasi → **«Bosh
+ekranga qo'shish»**. (Chrome yoki Telegram ichidagi brauzerda bu ishlamaydi —
+iOS'da faqat Safari o'rnata oladi.)
+
+**Android:** Chrome o'zi «Ilovani o'rnatish» deb taklif qiladi.
+
+O'rnatilgandan keyin: o'z ikonkasi bo'ladi, manzil qatorisiz to'liq ekranda
+ochiladi va internetsiz ham ishlaydi.
+
+### Yangilanish qanday yetib boradi
+
+Saytga yangi versiya chiqarilganda telefondagi ilova ham yangilanadi — App
+Store tekshiruvi kutilmaydi. Buning uchun:
+
+- `public/sw.js` HTML'ni **avval tarmoqdan** oladi, kesh esa faqat tarmoq yo'q
+  bo'lganda ishlatiladi. Shu sababli ilovani qayta ochish yangi versiyani beradi
+- `vite.config.ts` dagi plagin build vaqtida `sw.js` ga build belgisini joylaydi.
+  Bu shart: brauzer service worker'ni faqat **fayl mazmuni o'zgarganda** yangi
+  deb biladi, `sw.js` esa statik fayl bo'lgani uchun har deploy'da bir xil
+  qolardi va yangilanish sezilmasdi
+- Ilova ochiq turganda ham yangilanish kelsa, pastda **«Yangi versiya tayyor»**
+  chizig'i chiqadi. Avtomatik qayta yuklanmaydi — summa kiritayotgan payt
+  sahifa o'zi yangilansa, yozayotganingiz yo'qolardi
+- `/api/*` so'rovlari **hech qachon keshlanmaydi** — aks holda ilova eski
+  ma'lumotni ko'rsatib, uni bulutga yozib yuborardi
+
 ## Texnologiyalar
 
 - React 19 + TypeScript + Vite
