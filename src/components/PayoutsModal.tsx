@@ -34,6 +34,7 @@ import {
   channelKeyOf,
   channelInfo,
 } from '../types';
+import { cleanDecimal } from '../numInput';
 
 interface PayoutsModalProps {
   isOpen: boolean;
@@ -53,9 +54,20 @@ const monthLabel = (m: string) => {
   return `${MONTH_NAMES[mm] || mm} ${y}`;
 };
 
-const sanitize = (v: string) => v.replace(/[^\d.]/g, '');
+/**
+ * USD summasi: vergul ham NUQTA deb qabul qilinadi — telefon klaviaturasi
+ * o'nlik ajratgich sifatida ko'pincha vergul beradi ("41,02" = 41.02).
+ */
+const sanitize = (v: string) => cleanDecimal(v);
+
+/**
+ * Kurs (so'm): bu yerda vergul aksincha MINGLIK ajratgich ("12,850"),
+ * shuning uchun u nuqtaga aylantirilmaydi, olib tashlanadi.
+ */
+const sanitizeRate = (v: string) => cleanDecimal(v.replace(/,/g, ''));
+
 const num = (v: string) => {
-  const n = parseFloat(sanitize(v));
+  const n = parseFloat(v);
   return Number.isFinite(n) ? n : NaN;
 };
 
@@ -583,7 +595,7 @@ export const PayoutsModal: React.FC<PayoutsModalProps> = ({
                             <input
                               inputMode="decimal"
                               value={rateDraft}
-                              onChange={(e) => setRateDraft(sanitize(e.target.value))}
+                              onChange={(e) => setRateDraft(sanitizeRate(e.target.value))}
                               onKeyDown={(e) => e.key === 'Enter' && save(m.key)}
                               placeholder="1 USD = ? so'm"
                               className="w-full px-3 py-2.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-700 placeholder-slate-300"

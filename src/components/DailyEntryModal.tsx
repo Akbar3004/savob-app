@@ -14,6 +14,7 @@ import {
   formatUSD,
 } from '../types';
 import { appTodayISO, DATA_LAG_DAYS } from '../appDate';
+import { cleanDecimal, cleanInteger } from '../numInput';
 
 export interface DailyEntry {
   channelId: string;
@@ -156,12 +157,22 @@ export const DailyEntryModal: React.FC<DailyEntryModalProps> = ({
   };
 
   const setValue = (id: string, raw: string) => {
-    // USD da nuqta bilan, so'mda faqat butun son
-    const clean =
-      currency === 'USD'
-        ? raw.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1')
-        : raw.replace(/\D/g, '');
+    // USD da nuqta bilan (vergul ham nuqta deb qabul qilinadi),
+    // so'mda faqat butun son
+    const clean = currency === 'USD' ? cleanDecimal(raw) : cleanInteger(raw);
     setValues((v) => ({ ...v, [id]: clean }));
+  };
+
+  /**
+   * Telefon klaviaturasida nuqta tugmasi topilmasligi mumkin — sentni
+   * kiritish uchun uni o'zimiz qo'shamiz.
+   */
+  const insertDot = (id: string) => {
+    setValues((v) => {
+      const cur = v[id] || '';
+      if (cur.includes('.')) return v;
+      return { ...v, [id]: (cur || '0') + '.' };
+    });
   };
 
   const shiftDate = (days: number) => {
@@ -283,16 +294,34 @@ export const DailyEntryModal: React.FC<DailyEntryModalProps> = ({
                       </span>
                     )}
                   </div>
-                  <input
-                    inputMode={currency === 'USD' ? 'decimal' : 'numeric'}
-                    value={values[id] || ''}
-                    onChange={(e) => setValue(id, e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && save()}
-                    placeholder="0"
-                    className={`w-28 shrink-0 text-right text-sm font-bold px-3 py-2 rounded-xl border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all tabular-nums ${
-                      had ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50 border-slate-200'
-                    }`}
-                  />
+                  <div className="relative w-28 shrink-0">
+                    <input
+                      type="text"
+                      inputMode={currency === 'USD' ? 'decimal' : 'numeric'}
+                      value={values[id] || ''}
+                      onChange={(e) => setValue(id, e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && save()}
+                      placeholder="0"
+                      className={`w-full text-right text-sm font-bold py-2 rounded-xl border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all tabular-nums ${
+                        currency === 'USD' ? 'pl-9 pr-3' : 'px-3'
+                      } ${
+                        had ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50 border-slate-200'
+                      }`}
+                    />
+                    {currency === 'USD' && (
+                      <button
+                        type="button"
+                        // Tugma bosilganda maydondan fokus ketmasin
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => insertDot(id)}
+                        disabled={(values[id] || '').includes('.')}
+                        title="Sent kiritish uchun nuqta"
+                        className="absolute left-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg bg-indigo-100 hover:bg-indigo-200 disabled:opacity-30 text-indigo-700 font-black text-lg leading-none flex items-center justify-center pb-1.5 transition-all active:scale-95"
+                      >
+                        .
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -330,8 +359,17 @@ export const DailyEntryModal: React.FC<DailyEntryModalProps> = ({
 
           <p className="flex items-start gap-1.5 text-[9.5px] font-semibold text-slate-400 leading-snug mb-3">
             <Info className="w-3 h-3 shrink-0 mt-px" />
-            Bo'sh qoldirilgan kanal o'zgarmaydi. Yozuvni o'chirish uchun ro'yxatdagi
-            savat belgisidan foydalaning.
+            <span>
+              {currency === 'USD' && (
+                <>
+                  Sent uchun{' '}
+                  <span className="font-black text-indigo-500">[ . ]</span> tugmasini
+                  bosing — vergul ham nuqta deb qabul qilinadi (41,02 = 41.02).{' '}
+                </>
+              )}
+              Bo'sh qoldirilgan kanal o'zgarmaydi. Yozuvni o'chirish uchun ro'yxatdagi
+              savat belgisidan foydalaning.
+            </span>
           </p>
 
           <button
