@@ -8,15 +8,15 @@
 
 /* ===== 3D Card Effects ===== */
 .card-3d {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(20px) saturate(150%);
   border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 1.5rem;
   box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.04),
     0 10px 15px -3px rgba(0, 0, 0, 0.06),
     0 20px 40px -4px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+    var(--lg-edge);
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   transform: perspective(1000px) rotateX(0deg) rotateY(0deg) translateZ(0px);
 }
@@ -26,22 +26,22 @@
     0 8px 16px -2px rgba(0, 0, 0, 0.06),
     0 20px 30px -4px rgba(0, 0, 0, 0.1),
     0 30px 60px -8px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 0 rgba(255, 255, 255, 1);
+    var(--lg-edge);
 }
 
 /* Tinch karta: sichqoncha kelganda qiyshaymaydi va ko'tarilmaydi —
    faqat chetlarida gradient chegara va rangli yorug'lik paydo bo'ladi. */
 .card-glow {
   position: relative;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(20px) saturate(150%);
   border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 1.5rem;
   box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.04),
     0 10px 15px -3px rgba(0, 0, 0, 0.06),
     0 20px 40px -4px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+    var(--lg-edge);
   transition: box-shadow 0.45s ease, border-color 0.45s ease;
 }
 /* Gradient chegara halqasi (faqat chet chizig'i chiziladi, ichi maskalanadi) */
@@ -70,7 +70,7 @@
     0 10px 15px -3px rgba(0, 0, 0, 0.06),
     0 18px 40px -10px rgba(99, 102, 241, 0.3),
     0 34px 60px -20px rgba(168, 85, 247, 0.26),
-    inset 0 1px 0 0 rgba(255, 255, 255, 1);
+    var(--lg-edge);
 }
 @media (prefers-reduced-motion: reduce) {
   .card-glow,
@@ -128,6 +128,41 @@
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(16px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: var(--lg-edge);
+}
+
+/* =====================================================================
+   LIQUID GLASS — "ZO'RG'A" DARAJASI
+
+   Ikkita gap qo'shiladi, xolos:
+     1) chetdagi rangli nur — yuqori chapdan moviy, past o'ngdan pushti,
+        haqiqiy shishaning chetida yorug'lik shunday sinadi;
+     2) ustki yorug'lik chizig'i.
+
+   Ataylab pseudo-element ham, qo'shimcha backdrop-filter qatlami ham
+   ISHLATILMADI: backdrop-filter — mobil brauzerdagi eng qimmat narsa,
+   har elementga ikkinchi qatlam qo'shilsa eskiroq telefonda varaqlash
+   tutila boshlaydi. Butun effekt box-shadow bilan chiziladi, ya'ni
+   tekin. Kuchini o'zgartirish uchun quyidagi ikki sonni tuzatish kifoya.
+   ===================================================================== */
+:root {
+  --lg-spec: 0.45;    /* ustki yorug'lik kuchi */
+  --lg-chroma: 0.5;   /* chetdagi rangli nur kuchi */
+
+  --lg-edge:
+    inset 0 0 0 1px rgba(255, 255, 255, calc(var(--lg-spec) * 1)),
+    inset 0 1px 1px 0 rgba(255, 255, 255, calc(var(--lg-spec) * 1.8)),
+    inset 3px 4px 10px -6px rgba(140, 190, 255, calc(var(--lg-chroma) * 1.1)),
+    inset -3px -4px 10px -6px rgba(255, 175, 215, calc(var(--lg-chroma) * 0.9));
+}
+
+/* Yopishib turadigan yuqori panel */
+.liquid-panel {
+  box-shadow: var(--lg-edge), 0 2px 8px -4px rgba(23, 32, 54, 0.18);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .liquid-panel { transition: box-shadow 0.4s ease; }
 }
 
 /* ===== Range slider custom ===== */
@@ -222,10 +257,68 @@ input[type="range"]::-webkit-slider-thumb:hover {
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-/* ===== Background Pattern ===== */
+/* ===== Background Pattern =====
+   Eski tekis fon. Endi asosiy ekranlarda .water-bg ishlatiladi, lekin
+   bu klass qolib turibdi — kirish oynasi kabi joylarda hali kerak. */
 .bg-pattern {
-  background-image: 
+  background-image:
     radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.05) 0%, transparent 50%),
     radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.04) 0%, transparent 50%),
     radial-gradient(circle at 40% 80%, rgba(245, 158, 11, 0.03) 0%, transparent 50%);
+}
+
+/* ===== SOKIN SUV — sahifaning orqa foni =====
+   To'rtta yorug'lik dog'i sekin suzadi. `fixed` + manfiy z-index:
+   sahifa bilan siljimaydi va butun kontentning orqasida qoladi. */
+.water-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: #f8fafc;
+}
+.water-blob {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(60px);
+  will-change: transform;
+}
+.water-blob-1 {
+  width: 60vmax; height: 60vmax; left: -16vmax; top: -20vmax;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.42), transparent 66%);
+  animation: waterDriftA 54s ease-in-out infinite;
+}
+.water-blob-2 {
+  width: 52vmax; height: 52vmax; right: -14vmax; top: 4vmax;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.34), transparent 66%);
+  animation: waterDriftB 71s ease-in-out infinite;
+}
+.water-blob-3 {
+  width: 68vmax; height: 68vmax; left: 4vmax; bottom: -32vmax;
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.30), transparent 66%);
+  animation: waterDriftC 89s ease-in-out infinite;
+}
+.water-blob-4 {
+  width: 32vmax; height: 32vmax; right: 6vmax; bottom: -6vmax;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.20), transparent 64%);
+  animation: waterDriftB 63s ease-in-out infinite reverse;
+}
+@keyframes waterDriftA {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33%      { transform: translate3d(7vmax, 5vmax, 0) scale(1.08); }
+  66%      { transform: translate3d(-4vmax, 9vmax, 0) scale(0.95); }
+}
+@keyframes waterDriftB {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(-9vmax, 7vmax, 0) scale(1.12); }
+}
+@keyframes waterDriftC {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  40%      { transform: translate3d(6vmax, -6vmax, 0) scale(1.06); }
+  75%      { transform: translate3d(-7vmax, -2vmax, 0) scale(0.97); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .water-blob { animation: none; }
 }
