@@ -35,6 +35,7 @@ import { DailyEntryModal, type DailyEntry } from './components/DailyEntryModal';
 import { MonthlyChart } from './components/MonthlyChart';
 import { TransactionList } from './components/TransactionList';
 import { AuthModal } from './components/AuthModal';
+import { WaterBackground } from './components/WaterBackground';
 import { readCache, writeCache } from './services/localCache';
 import { GuestApp } from './GuestApp';
 import { fetchGuestData, type GuestData, type ShareEntry } from './services/share';
@@ -1033,7 +1034,11 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 bg-pattern text-slate-800 flex flex-col font-sans selection:bg-indigo-100 selection:text-indigo-900 pb-16">
+    <div className="min-h-screen text-slate-800 flex flex-col font-sans selection:bg-indigo-100 selection:text-indigo-900 pb-16">
+      {/* Sokin suv foni. `bg-slate-50` ATAYLAB olib tashlandi — u fonni
+          yopib qo'yardi; asosiy rangni endi WaterBackground o'zi beradi. */}
+      <WaterBackground />
+
       {/* Toast */}
       {toastMessage && (
         <div className="fixed top-6 right-6 z-50 pointer-events-none">
@@ -1168,7 +1173,7 @@ export default function App() {
             davr/kanal tanlash va tugmalar har doim qo'l ostida bo'ladi. */}
         <div
           style={{ top: headerHeight }}
-          className="sticky z-30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 mb-6 p-3 sm:p-4 bg-white/85 backdrop-blur-xl rounded-2xl border border-slate-200/60 shadow-sm shadow-slate-200/50"
+          className="liquid-panel sticky z-30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 mb-6 p-3 sm:p-4 bg-white/90 backdrop-blur-xl backdrop-saturate-150 rounded-2xl border border-white/50"
         >
           <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-2 min-w-0">
             <div className="flex items-center gap-2">

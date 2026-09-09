@@ -21,6 +21,7 @@ import { MonthlyChart } from './components/MonthlyChart';
 import { TransactionList } from './components/TransactionList';
 import { ExportPDFModal } from './components/ExportPDFModal';
 import { saveGuestGoals, type GuestData } from './services/share';
+import { WaterBackground } from './components/WaterBackground';
 
 interface GuestAppProps {
   guestHash: string;
@@ -146,7 +147,9 @@ export const GuestApp: React.FC<GuestAppProps> = ({ guestHash, data, onLogout })
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 bg-pattern text-slate-800 flex flex-col font-sans pb-16">
+    <div className="min-h-screen text-slate-800 flex flex-col font-sans pb-16">
+      <WaterBackground />
+
       {/* Sarlavha */}
       <header className="glass sticky top-0 z-40 border-b border-white/30">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
