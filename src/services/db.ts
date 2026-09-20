@@ -1,4 +1,5 @@
 import { Transaction, Channel, Payouts, SelfChannel } from '../types';
+import type { Milestone } from './milestone';
 
 // Har bir foydalanuvchi ma'lumoti parol xeshi bo'yicha saqlanadi.
 // binId === parol xeshi (SHA-256, hex). Alohida registry kerak emas.
@@ -30,6 +31,8 @@ export interface UserData {
   deletedIds?: string[];
   // Boshqa insonlarga berilgan kirishlar (kanal egalari o'z kanalini ko'rishi uchun).
   shares?: ShareEntry[];
+  // "Marra" kartasi: to'planadigan umumiy summa chegarasi.
+  milestone?: Milestone;
   // Oxirgi yozilgan vaqt (ms). Server har PUT'da yangilaydi; qurilmalarni solishtirishda ishlatiladi.
   updatedAt?: number;
 }
@@ -67,6 +70,11 @@ function normalize(data: any): UserData {
     payouts: data?.payouts && typeof data.payouts === 'object' ? data.payouts : {},
     deletedIds: Array.isArray(data?.deletedIds) ? data.deletedIds : [],
     shares: Array.isArray(data?.shares) ? data.shares : [],
+    milestone:
+      data?.milestone && typeof data.milestone === 'object' &&
+      typeof data.milestone.amount === 'number' && data.milestone.amount > 0
+        ? data.milestone
+        : undefined,
     updatedAt: typeof data?.updatedAt === 'number' ? data.updatedAt : 0,
   };
 }
@@ -105,6 +113,7 @@ export function mergeUserData(a: UserData, b: UserData): UserData {
     selfChannel: newer.selfChannel || older.selfChannel,
     payouts: { ...(older.payouts || {}), ...(newer.payouts || {}) },
     shares: newer.shares || older.shares || [],
+    milestone: newer.milestone || older.milestone,
     deletedIds,
     updatedAt: Math.max(aTime, bTime),
   };

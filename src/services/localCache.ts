@@ -23,6 +23,7 @@ export const cacheKeys = (id: string) => ({
   payouts: `savob_payouts_${id}`,
   selfChan: `savob_selfchan_${id}`,
   shares: `savob_shares_${id}`,
+  milestone: `savob_milestone_${id}`,
 });
 
 export function writeCache(id: string, d: UserData): void {
@@ -39,6 +40,7 @@ export function writeCache(id: string, d: UserData): void {
     localStorage.setItem(k.payouts, JSON.stringify(d.payouts || {}));
     localStorage.setItem(k.selfChan, JSON.stringify(d.selfChannel || null));
     localStorage.setItem(k.shares, JSON.stringify(d.shares || []));
+    localStorage.setItem(k.milestone, JSON.stringify(d.milestone || null));
   } catch {
     // Xotira to'lgan yoki maxfiy rejim — yozib bo'lmasa ilova baribir ishlaydi
   }
@@ -61,6 +63,7 @@ export function readCache(id: string): UserData | null {
       payouts: JSON.parse(localStorage.getItem(k.payouts) || '{}'),
       selfChannel: JSON.parse(localStorage.getItem(k.selfChan) || 'null') || undefined,
       shares: JSON.parse(localStorage.getItem(k.shares) || '[]'),
+      milestone: JSON.parse(localStorage.getItem(k.milestone) || 'null') || undefined,
     };
   } catch {
     return null;
