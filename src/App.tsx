@@ -47,6 +47,8 @@ import { IncomeGoalCard } from './components/IncomeGoalCard';
 import { IncomeForecastCard } from './components/IncomeForecastCard';
 import { ChannelsModal } from './components/ChannelsModal';
 import { ChannelBreakdownCard } from './components/ChannelBreakdownCard';
+import { MilestoneCard } from './components/MilestoneCard';
+import type { Milestone } from './services/milestone';
 import { PayoutsModal } from './components/PayoutsModal';
 import { AnalyticsModal } from './components/AnalyticsModal';
 import { saveUserData, fetchUserData, mergeUserData, hashPassword, UserData } from './services/db';
@@ -64,6 +66,7 @@ export default function App() {
   const [payouts, setPayouts] = useState<Payouts>({});
   const [selfChannel, setSelfChannel] = useState<SelfChannel | undefined>(undefined);
   const [shares, setShares] = useState<ShareEntry[]>([]);
+  const [milestone, setMilestone] = useState<Milestone | undefined>(undefined);
   // Mehmon rejimi — boshqa kanal egasi faqat o'z kanalini ko'radi
   const [guest, setGuest] = useState<{ hash: string; data: GuestData } | null>(null);
   const [isPayoutsOpen, setIsPayoutsOpen] = useState(false);
@@ -116,6 +119,7 @@ export default function App() {
     setPayouts(d.payouts || {});
     setSelfChannel(d.selfChannel);
     setShares(d.shares || []);
+    setMilestone(d.milestone);
     deletedIdsRef.current = d.deletedIds || [];
     if (d.updatedAt) lastAppliedRef.current = d.updatedAt;
   };
@@ -145,6 +149,7 @@ export default function App() {
         ]),
       sc: [d.selfChannel?.name || '', d.selfChannel?.color || ''],
       sh: [...(d.shares || [])].sort((a, b) => a.code.localeCompare(b.code)).map((x) => [x.code, x.channelId]),
+      ms: d.milestone ? [d.milestone.amount, d.milestone.currency, d.milestone.scope] : null,
     });
 
   const scheduleRetry = () => {
@@ -371,7 +376,8 @@ export default function App() {
     chans: Channel[] = channels,
     pays: Payouts = payouts,
     self: SelfChannel | undefined = selfChannel,
-    shrs: ShareEntry[] = shares
+    shrs: ShareEntry[] = shares,
+    mstone: Milestone | undefined = milestone
   ) => {
     const payload: UserData = {
       transactions: updatedTxs,
@@ -385,6 +391,7 @@ export default function App() {
       selfChannel: self,
       updatedAt: Date.now(),
       shares: shrs,
+      milestone: mstone,
     };
 
     writeCache(currentBinId, payload);
@@ -496,6 +503,18 @@ export default function App() {
     );
     if (binId) {
       performSync(transactions, charityPercentage, exchangeRate, binId, incomeGoals, updatedYearly);
+    }
+  };
+
+  /** Marra summasi / nimalar sanalishi o'zgardi. */
+  const handleSetMilestone = (m: Milestone) => {
+    setMilestone(m);
+    if (binId) {
+      performSync(
+        transactions, charityPercentage, exchangeRate, binId,
+        incomeGoals, yearlyGoals, deletedIdsRef.current,
+        channels, payouts, selfChannel, shares, m
+      );
     }
   };
 
@@ -1302,6 +1321,16 @@ export default function App() {
               monthKey={goalMonthKey}
               currentGoal={incomeGoals[goalMonthKey] || 0}
               onSetGoal={handleSetIncomeGoal}
+            />
+            <MilestoneCard
+              transactions={transactions}
+              channels={channels}
+              charityPercentage={charityPercentage}
+              exchangeRate={exchangeRate}
+              payouts={payouts}
+              factors={factors}
+              milestone={milestone}
+              onSet={handleSetMilestone}
             />
             </>
           );
